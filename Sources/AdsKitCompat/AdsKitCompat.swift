@@ -106,7 +106,7 @@ public enum UMPManager {
     @available(*, deprecated, message: "Use `try await umpClient.requestConsentIfNeeded()`.")
     public static func requestConsentIfNeeded() async {
         @Dependency(\.umpClient) var client
-        _ = try? await client.requestConsentIfNeeded()
+        _ = try? await client.requestConsentIfNeeded(.init())
     }
 }
 
