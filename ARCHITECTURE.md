@@ -18,7 +18,7 @@ RemoteConfigClient      → Firebase Remote Config fetch + actor cache
 UMPClient               → Google UMP consent flow
 AdjustClient            → Adjust SDK init + event/revenue tracking
 AnalyticClient          → Firebase Analytics + Crashlytics wrapper
-                          + AnalyticValue (String/Int/Double/Bool params)
+                          + AnalyticClient.Param (String/Int/Double/Bool params)
 ```
 
 ## Three flows
@@ -75,7 +75,7 @@ RevenueBridge (@MainActor, in MobileAdsClientLive/Live.swift)
        await adjustClient.trackRevenue(AdjustRevenue(...))
           → ADJAdRevenue → Adjust.trackAdRevenue
           → optional Adjust.trackEvent(revenueEventToken) if configured
-       await analyticClient.trackEvent("ad_revenue", [typed AnalyticValue dict])
+       await analyticClient.trackEvent("ad_revenue", [typed AnalyticClient.Param dict])
           → Analytics.logEvent
     }
 ```

@@ -36,7 +36,7 @@ Five sibling packages, re-exported through one umbrella:
 | **RemoteConfigClient** | Firebase Remote Config fetch + actor cache + `AsyncStream<AdConfig>` |
 | **UMPClient** | Google UMP consent flow |
 | **AdjustClient** | Adjust SDK init + event / revenue tracking |
-| **AnalyticClient** | Firebase Analytics + Crashlytics (typed `AnalyticValue` params) |
+| **AnalyticClient** | Firebase Analytics + Crashlytics (typed `AnalyticClient.Param` params) |
 
 Every client:
 - is a `@DependencyClient` struct of `@Sendable` async closures
@@ -148,7 +148,7 @@ That's it. The reducer runs ATT → UMP → Remote Config → Adjust → Revenue
 
 ### `@_exported import`
 
-`import AdsKit` brings every interface symbol (`MobileAdsClient`, `UMPConsentStatus`, `AdjustConfig`, `AnalyticValue`, `AdsBootstrap`, `NativeAdFeature`, …) into scope without five individual imports.
+`import AdsKit` brings every interface symbol (`MobileAdsClient`, `UMPConsentStatus`, `AdjustConfig`, `AnalyticClient.Param`, `AdsBootstrap`, `NativeAdFeature`, …) into scope without five individual imports.
 
 `import AdsKitLive` additionally registers `DependencyKey.liveValue` for each client. Import it once in the app entry point; other files only need `import AdsKit`.
 
@@ -514,7 +514,7 @@ Event + screen tracking with typed params:
 ```swift
 @Dependency(\.analyticClient) var analyticClient
 
-// AnalyticValue is ExpressibleBy…Literal for every primitive type
+// AnalyticClient.Param is ExpressibleBy…Literal for every primitive type
 await analyticClient.trackScreen("Home", ["source": "deeplink"])
 await analyticClient.trackEvent("purchase", [
     "product_id": "pro.yearly",

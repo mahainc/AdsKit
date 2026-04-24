@@ -140,7 +140,7 @@ public enum AdjustManager {
 
 // MARK: - AnalyticsService shim
 
-@available(*, deprecated, message: "Use `@Dependency(\\.analyticClient)` and pass typed `AnalyticValue` params.")
+@available(*, deprecated, message: "Use `@Dependency(\\.analyticClient)` and pass typed `AnalyticClient.Param` params.")
 public enum AnalyticsService {
     @available(*, deprecated, message: "Use `@Dependency(\\.analyticClient)` instead of a singleton.")
     public static let shared = AnalyticsService.self
@@ -151,10 +151,10 @@ public enum AnalyticsService {
         Task { await client.trackScreen(name, [:]) }
     }
 
-    @available(*, deprecated, message: "Use `await analyticClient.trackEvent(name, params)` with `AnalyticValue` params.")
+    @available(*, deprecated, message: "Use `await analyticClient.trackEvent(name, params)` with `AnalyticClient.Param` params.")
     public static func track(_ name: String, parameters: [String: String]? = nil) {
         @Dependency(\.analyticClient) var client
-        let mapped: [String: AnalyticValue] = (parameters ?? [:]).mapValues { .string($0) }
+        let mapped: AnalyticClient.Params = (parameters ?? [:]).mapValues { .string($0) }
         Task { await client.trackEvent(name, mapped) }
     }
 
@@ -170,10 +170,10 @@ public enum AnalyticsService {
         Task { await client.log(message) }
     }
 
-    @available(*, deprecated, message: "Use `await analyticClient.recordError(error, userInfo)` with typed `AnalyticValue` values.")
+    @available(*, deprecated, message: "Use `await analyticClient.recordError(error, userInfo)` with typed `AnalyticClient.Param` values.")
     public static func recordError(_ error: any Error & Sendable, userInfo: [String: String]? = nil) {
         @Dependency(\.analyticClient) var client
-        let mapped: [String: AnalyticValue]? = userInfo?.mapValues { .string($0) }
+        let mapped: AnalyticClient.Params? = userInfo?.mapValues { .string($0) }
         Task { await client.recordError(error, mapped) }
     }
 }
