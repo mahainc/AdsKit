@@ -28,6 +28,7 @@ public struct AdsBootstrap: Sendable {
             case requestingUMP
             case initializingAdjust
             case installingRevenueBridge
+            case installingResumeAdHandler
             case showingSplashAd
             case done
             case failed(reason: String)
@@ -40,6 +41,7 @@ public struct AdsBootstrap: Sendable {
                 case .requestingUMP: return "requestingUMP"
                 case .initializingAdjust: return "initializingAdjust"
                 case .installingRevenueBridge: return "installingRevenueBridge"
+                case .installingResumeAdHandler: return "installingResumeAdHandler"
                 case .showingSplashAd: return "showingSplashAd"
                 case .done: return "done"
                 case let .failed(reason): return "failed(\(reason))"
@@ -88,6 +90,14 @@ public struct AdsBootstrap: Sendable {
         /// When `false`, don't register as the ads_swift `AdRevenueDelegate`. Revenue events
         /// from ad impressions won't be forwarded to Adjust / Analytics.
         public let enableRevenueBridge: Bool
+        /// When `false`, skip installing the background→foreground app-open
+        /// resume-ad observer. Defaults to `true`.
+        public let enableResumeAdHandler: Bool
+        /// Returns the *current* premium state on each willEnterForeground.
+        /// Forwarded to `mobileAdsClient.installResumeAdHandler` so the resume
+        /// policy can short-circuit for premium users. Read at each invocation
+        /// — not captured — so in-session upgrades are respected.
+        public let isPremium: @Sendable () -> Bool
 
         public init(
             adjust: AdjustConfig,
@@ -96,7 +106,9 @@ public struct AdsBootstrap: Sendable {
             preloads: @escaping @Sendable () async -> Void = {},
             enableUMP: Bool = true,
             enableAdjust: Bool = true,
-            enableRevenueBridge: Bool = true
+            enableRevenueBridge: Bool = true,
+            enableResumeAdHandler: Bool = true,
+            isPremium: @escaping @Sendable () -> Bool = { false }
         ) {
             self.adjust = adjust
             self.ump = ump
@@ -105,6 +117,8 @@ public struct AdsBootstrap: Sendable {
             self.enableUMP = enableUMP
             self.enableAdjust = enableAdjust
             self.enableRevenueBridge = enableRevenueBridge
+            self.enableResumeAdHandler = enableResumeAdHandler
+            self.isPremium = isPremium
         }
     }
 
@@ -158,6 +172,11 @@ public struct AdsBootstrap: Sendable {
                     if config.enableRevenueBridge {
                         await send(.advance(.installingRevenueBridge))
                         await mobileAdsClient.installRevenueBridge()
+                    }
+
+                    if config.enableResumeAdHandler {
+                        await send(.advance(.installingResumeAdHandler))
+                        await mobileAdsClient.installResumeAdHandler(config.isPremium)
                     }
 
                     await send(.advance(.showingSplashAd))
