@@ -13,7 +13,6 @@ struct AdsBootstrapTests {
             AdsBootstrap()
         } withDependencies: {
             $0.mobileAdsClient = .testValue
-            $0.remoteConfigClient = .happyPath
             $0.umpClient = .alwaysObtained
             $0.adjustClient = .noop
             $0.analyticClient = .noop
@@ -24,13 +23,12 @@ struct AdsBootstrapTests {
         )
 
         await store.send(.start(config)) { $0.phase = .requestingATT }
+        await store.receive(\.advance) { $0.phase = .preloading }
         await store.receive(\.advance) { $0.phase = .requestingUMP }
         await store.receive(\.consentResolved) { $0.consentStatus = .obtained }
-        await store.receive(\.advance) { $0.phase = .fetchingRemoteConfig }
         await store.receive(\.advance) { $0.phase = .initializingAdjust }
         await store.receive(\.advance) { $0.phase = .installingRevenueBridge }
-        await store.receive(\.advance) { $0.phase = .preloading }
-        await store.receive(\.advance) { $0.phase = .showingSplashInterstitial }
+        await store.receive(\.advance) { $0.phase = .showingSplashAd }
         await store.receive(\.advance) { $0.phase = .done }
     }
 
@@ -41,7 +39,6 @@ struct AdsBootstrapTests {
             AdsBootstrap()
         } withDependencies: {
             $0.mobileAdsClient = .testValue
-            $0.remoteConfigClient = .happyPath
             $0.umpClient = .alwaysObtained        // should never be consulted
             $0.adjustClient = .noop
             $0.analyticClient = .noop
@@ -53,23 +50,18 @@ struct AdsBootstrapTests {
         )
 
         await store.send(.start(config)) { $0.phase = .requestingATT }
-        await store.receive(\.advance) { $0.phase = .requestingUMP }
-        // No consentResolved — skipped.
-        await store.receive(\.advance) { $0.phase = .fetchingRemoteConfig }
+        await store.receive(\.advance) { $0.phase = .preloading }
+        // No requestingUMP / consentResolved — skipped.
         await store.receive(\.advance) { $0.phase = .initializingAdjust }
         await store.receive(\.advance) { $0.phase = .installingRevenueBridge }
-        await store.receive(\.advance) { $0.phase = .preloading }
-        await store.receive(\.advance) { $0.phase = .showingSplashInterstitial }
+        await store.receive(\.advance) { $0.phase = .showingSplashAd }
         await store.receive(\.advance) { $0.phase = .done }
     }
 
-    @Test("useTolerantFetch=false surfaces fetch error via .didFail")
+    @Test("preloads closure runs during .preloading phase")
     @MainActor
-    func strictFetchFailure() async {
-        struct FetchError: LocalizedError, Sendable {
-            var errorDescription: String? { "boom" }
-        }
-
+    func preloadsInvoked() async {
+        let preloadRan = LockIsolated(false)
         let store = TestStore(initialState: AdsBootstrap.State()) {
             AdsBootstrap()
         } withDependencies: {
@@ -77,23 +69,23 @@ struct AdsBootstrapTests {
             $0.umpClient = .alwaysObtained
             $0.adjustClient = .noop
             $0.analyticClient = .noop
-            $0.remoteConfigClient = .happyPath
-            $0.remoteConfigClient.fetchAndActivate = { throw FetchError() }
         }
 
         let config = AdsBootstrap.Config(
             adjust: AdjustConfig(appToken: "", environment: .sandbox),
-            useTolerantFetch: false
+            preloads: { preloadRan.setValue(true) }
         )
 
         await store.send(.start(config)) { $0.phase = .requestingATT }
+        await store.receive(\.advance) { $0.phase = .preloading }
         await store.receive(\.advance) { $0.phase = .requestingUMP }
         await store.receive(\.consentResolved) { $0.consentStatus = .obtained }
-        await store.receive(\.advance) { $0.phase = .fetchingRemoteConfig }
-        await store.receive(\.didFail) {
-            $0.phase = .failed(reason: "remote config: boom")
-        }
-        // No further advances — didFail cancels the effect.
+        await store.receive(\.advance) { $0.phase = .initializingAdjust }
+        await store.receive(\.advance) { $0.phase = .installingRevenueBridge }
+        await store.receive(\.advance) { $0.phase = .showingSplashAd }
+        await store.receive(\.advance) { $0.phase = .done }
+
+        #expect(preloadRan.value == true)
     }
 
     @Test("cancel stops the in-flight effect — no further phases received")
@@ -108,7 +100,6 @@ struct AdsBootstrapTests {
                 // Suspend indefinitely; the task will be cancelled before this finishes.
                 try? await Task.sleep(nanoseconds: .max)
             }
-            $0.remoteConfigClient = .happyPath
             $0.umpClient = .alwaysObtained
             $0.adjustClient = .noop
             $0.analyticClient = .noop

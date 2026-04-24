@@ -69,15 +69,15 @@ public enum AdUtil {
 
 // MARK: - RemoteConfigManager shim
 
-@available(*, deprecated, message: "Use `@Dependency(\\.remoteConfigClient)` and call `.adConfig()` / `.enableAllAds()` / `.fetchAndActivate()` directly.")
+@available(*, deprecated, message: "Use `@Dependency(\\.remoteConfigClient)` and call `.adConfig()` / `.fetchAndActivate()` directly.")
 public enum RemoteConfigManager {
     @available(*, deprecated, message: "Use `@Dependency(\\.remoteConfigClient)` instead of a singleton.")
     public static let shared = RemoteConfigManager.self
 
-    @available(*, deprecated, message: "Use `try await remoteConfigClient.enableAllAds()`.")
+    @available(*, deprecated, message: "Use `try await remoteConfigClient.adConfig().showAllAds`.")
     public static func enableAllAds() async -> Bool {
         @Dependency(\.remoteConfigClient) var rc
-        return (try? await rc.enableAllAds()) ?? false
+        return (try? await rc.adConfig().showAllAds) ?? false
     }
 
     @available(*, deprecated, message: "Use `try await remoteConfigClient.adConfig()`.")
