@@ -49,6 +49,7 @@ let package = Package(
             dependencies: [
                 .product(name: "MobileAdsClientLive", package: "MobileAdsClient"),
                 .product(name: "MobileAdsClientUI", package: "MobileAdsClient"),
+                .product(name: "NativeAdClientLive", package: "MobileAdsClient"),
                 .product(name: "RemoteConfigClientLive", package: "RemoteConfigClient"),
                 .product(name: "UMPClientLive", package: "UMPClient"),
                 .product(name: "AdjustClientLive", package: "AdjustClient"),
