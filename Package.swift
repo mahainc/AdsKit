@@ -19,11 +19,11 @@ let package = Package(
         .singleTargetLibrary("AdsKitCompat"),
     ],
     dependencies: [
-        .package(path: "../MobileAdsClient"),
-        .package(path: "../RemoteConfigClient"),
-        .package(path: "../UMPClient"),
-        .package(path: "../AdjustClient"),
-        .package(path: "../AnalyticClient"),
+        .package(url: "https://github.com/mahainc/MobileAdsClient.git", branch: "master"),
+        .package(url: "https://github.com/mahainc/RemoteConfigClient.git", branch: "master"),
+        .package(url: "https://github.com/mahainc/UMPClient.git", branch: "main"),
+        .package(url: "https://github.com/mahainc/AdjustClient.git", branch: "master"),
+        .package(url: "https://github.com/mahainc/AnalyticClient.git", branch: "master"),
     ],
     targets: [
         .target(
