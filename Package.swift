@@ -12,18 +12,13 @@ let package = Package(
         .singleTargetLibrary("AdsKit"),
         /// Live bundle. Add this to the app target that actually runs the ad SDKs.
         .singleTargetLibrary("AdsKitLive"),
-        /// Deprecated-typealias shims for gradual migration from `AdUtil` / `RemoteConfigManager.shared` /
-        /// `AdjustManager.shared` / `UMPManager.shared` / `AnalyticsService.shared`.
-        /// Add this only to files that still reference the legacy API; you'll get
-        /// `@available(*, deprecated)` warnings pointing at the new dependency clients.
-        .singleTargetLibrary("AdsKitCompat"),
     ],
     dependencies: [
         .package(url: "https://github.com/mahainc/MobileAdsClient.git", branch: "master"),
         .package(url: "https://github.com/mahainc/RemoteConfigClient.git", branch: "master"),
         .package(url: "https://github.com/mahainc/UMPClient.git", branch: "main"),
         .package(url: "https://github.com/mahainc/AdjustClient.git", branch: "master"),
-        .package(url: "https://github.com/mahainc/AnalyticClient.git", branch: "master"),
+        .package(url: "https://github.com/mahainc/AnalyticClient.git", from: "1.0.0"),
     ],
     targets: [
         .target(
@@ -35,14 +30,6 @@ let package = Package(
                 .product(name: "AdjustClient", package: "AdjustClient"),
                 .product(name: "AnalyticClient", package: "AnalyticClient"),
             ]
-        ),
-        .target(
-            name: "AdsKitCompat",
-            dependencies: ["AdsKit"]
-        ),
-        .testTarget(
-            name: "AdsKitTests",
-            dependencies: ["AdsKit"]
         ),
         .target(
             name: "AdsKitLive",

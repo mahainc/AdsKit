@@ -1,5 +1,5 @@
 {
-  "originHash" : "60b7e4208476dd0f4f0a965057bd55c2374c3730c7630df7748d1d3bc5a6e18c",
+  "originHash" : "560d16b17be7dcfcb121f1828c5e1e3d66add0deca4936a3a32b1cc2d2bf5b72",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -20,12 +20,30 @@
       }
     },
     {
-      "identity" : "ads-swift",
+      "identity" : "adjustclient",
       "kind" : "remoteSourceControl",
-      "location" : "https://DucManh98@bitbucket.org/innofyapp/ads-swift.git",
+      "location" : "https://github.com/mahainc/AdjustClient.git",
       "state" : {
-        "branch" : "feature/preload_ads",
-        "revision" : "8fff71763024fc3d94349a4d34fe468494c21303"
+        "branch" : "master",
+        "revision" : "a2215330c3a738e0468a8ee473e75a777051968a"
+      }
+    },
+    {
+      "identity" : "adrevenueclient",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mahainc/AdRevenueClient.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "43b73b7c327bbf44a2727c686bbb293fb298e31f"
+      }
+    },
+    {
+      "identity" : "analyticclient",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mahainc/AnalyticClient.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "d0ed72aff049c96ef2231409066618b6a639c427"
       }
     },
     {
@@ -137,12 +155,12 @@
       }
     },
     {
-      "identity" : "lottie-spm",
+      "identity" : "mobileadsclient",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/airbnb/lottie-spm.git",
+      "location" : "https://github.com/mahainc/MobileAdsClient.git",
       "state" : {
-        "revision" : "69faaefa7721fba9e434a52c16adf4329c9084db",
-        "version" : "4.6.0"
+        "branch" : "master",
+        "revision" : "da5579c7dc45389a01a533bdd2ad9127a8444b4d"
       }
     },
     {
@@ -161,6 +179,15 @@
       "state" : {
         "revision" : "540318ecedd63d883069ae7f1ed811a2df00b6ac",
         "version" : "2.4.0"
+      }
+    },
+    {
+      "identity" : "remoteconfigclient",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mahainc/RemoteConfigClient.git",
+      "state" : {
+        "branch" : "master",
+        "revision" : "6bd08cb052f5e01afc7975eaf9eeb1383cd1498b"
       }
     },
     {
@@ -296,6 +323,15 @@
       "state" : {
         "branch" : "master",
         "revision" : "894dde4e687f04adc68a9a20d36b70cab4bdda68"
+      }
+    },
+    {
+      "identity" : "umpclient",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mahainc/UMPClient.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "bb408ffa416edc6831e9908034168f8579b9277d"
       }
     },
     {

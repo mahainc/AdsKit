@@ -776,4 +776,3 @@ Your `.receive(\.action) { $0.someField = value }` closure must match the reduce
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — internal call graphs, state ownership, concurrency model
 - [swift-ios-guide/MIGRATION.md](../swift-ios-guide/MIGRATION.md) — full legacy → new API mapping
 - [swift-ios-guide/Ads/Templates/](../swift-ios-guide/Ads/Templates/) — AppDelegate, Splash, AI integration prompts
-- [Example/SampleApp/](./Example/SampleApp/) — minimal SPM consumer that exercises every surface
