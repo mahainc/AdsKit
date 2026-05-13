@@ -1,5 +1,5 @@
 {
-  "originHash" : "560d16b17be7dcfcb121f1828c5e1e3d66add0deca4936a3a32b1cc2d2bf5b72",
+  "originHash" : "36bcb7c345325c944429c50ffb2f88a5031150fee73510d83320bc443bd34bae",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mahainc/AdjustClient.git",
       "state" : {
-        "branch" : "master",
-        "revision" : "a2215330c3a738e0468a8ee473e75a777051968a"
+        "revision" : "74dcb559dcbdda32bf354c1716b66d85f94cc198",
+        "version" : "1.0.1"
       }
     },
     {
@@ -43,7 +43,7 @@
       "location" : "https://github.com/mahainc/AnalyticClient.git",
       "state" : {
         "branch" : "master",
-        "revision" : "d0ed72aff049c96ef2231409066618b6a639c427"
+        "revision" : "86c7cfed4b8d8d8f28963b4c4e4601ae2d5f30d6"
       }
     },
     {

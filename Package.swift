@@ -17,8 +17,8 @@ let package = Package(
         .package(url: "https://github.com/mahainc/MobileAdsClient.git", branch: "master"),
         .package(url: "https://github.com/mahainc/RemoteConfigClient.git", branch: "master"),
         .package(url: "https://github.com/mahainc/UMPClient.git", branch: "main"),
-        .package(url: "https://github.com/mahainc/AdjustClient.git", branch: "master"),
-        .package(url: "https://github.com/mahainc/AnalyticClient.git", from: "1.0.0"),
+        .package(url: "https://github.com/mahainc/AdjustClient.git", from: "1.0.1"),
+        .package(url: "https://github.com/mahainc/AnalyticClient.git", from: "1.0.1"),
     ],
     targets: [
         .target(
