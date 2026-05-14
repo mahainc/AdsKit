@@ -133,8 +133,11 @@ public enum AdsKit {
         let remoteConfigPrimed = configuration.primeRemoteConfig
         @Dependency(\.analyticClient) var analyticClient
         Task {
+            // Firebase reserves the `firebase_` param-name prefix and silently
+            // drops anything starting with it (logs I-ACS013008). Use a non-reserved
+            // form so the param survives into the Firebase Analytics report.
             await analyticClient.trackEvent("adskit_configure_success", [
-                "firebase_configured": .bool(firebaseConfigured),
+                "configured_firebase": .bool(firebaseConfigured),
                 "facebook_enabled": .bool(facebookEnabled),
                 "adjust_dispatched": .bool(adjustDispatched),
                 "remote_config_primed": .bool(remoteConfigPrimed),
