@@ -52,9 +52,12 @@ let package = Package(
                 // dyld actually loads it at startup. Without this, the framework
                 // is bundled into Frameworks/ but has no `LC_LOAD_DYLIB` entry —
                 // Firebase Analytics then logs `I-ACS044003: IDFA will not be
-                // accessible`. The `import` route doesn't work because the
-                // wrapper module exposes no Swift symbols.
-                .linkedFramework("GoogleAppMeasurementIdentitySupport"),
+                // accessible`.
+                //
+                // `-framework` alone is insufficient: modern linkers omit the load
+                // command when no symbol is referenced (dead-strip-linkage).
+                // `-needed_framework` forces the LC_LOAD_DYLIB unconditionally.
+                .unsafeFlags(["-Xlinker", "-needed_framework", "-Xlinker", "GoogleAppMeasurementIdentitySupport"]),
             ]
         ),
     ]
