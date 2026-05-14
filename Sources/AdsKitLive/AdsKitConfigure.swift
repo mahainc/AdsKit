@@ -44,17 +44,20 @@ public enum AdsKit {
         public var firebase: Firebase?
         public var facebook: Facebook
         public var adjust: AdjustConfig?
+        public var analytics: AnalyticConfig?
         public var primeRemoteConfig: Bool
 
         public init(
             firebase: Firebase? = nil,
             facebook: Facebook = .enabled,
             adjust: AdjustConfig? = nil,
+            analytics: AnalyticConfig? = AnalyticConfig(),
             primeRemoteConfig: Bool = true
         ) {
             self.firebase = firebase
             self.facebook = facebook
             self.adjust = adjust
+            self.analytics = analytics
             self.primeRemoteConfig = primeRemoteConfig
         }
 
@@ -95,6 +98,7 @@ public enum AdsKit {
                 firebase: .plistName(plistName),
                 facebook: .enabled,
                 adjust: adjust,
+                analytics: AnalyticConfig(),
                 primeRemoteConfig: primeRemoteConfig
             )
         }
@@ -105,10 +109,11 @@ public enum AdsKit {
     /// Single launch-time entry point. Idempotent — subsequent calls are no-ops.
     ///
     /// Order:
-    ///   1. Firebase.configure (synchronous; required before Remote Config prime)
+    ///   1. Firebase.configure (synchronous; required before Analytics/RemoteConfig)
     ///   2. Facebook activateApp (synchronous; canImport(FacebookCore)-gated)
-    ///   3. Adjust.initialize (fire-and-forget Task)
-    ///   4. Remote Config prime (fire-and-forget Task.detached)
+    ///   3. Analytics.initialize (fire-and-forget Task; must run after Firebase)
+    ///   4. Adjust.initialize (fire-and-forget Task)
+    ///   5. Remote Config prime (fire-and-forget Task.detached)
     ///
     /// ATT, UMP, ad preloads, and the splash ad continue to run in `AdsBootstrap`.
     @MainActor
@@ -126,6 +131,7 @@ public enum AdsKit {
         Logger.adsKitConfigure.info("start")
         configureFirebase(configuration.firebase)
         configureFacebook(configuration.facebook, application: application, launchOptions: launchOptions)
+        initializeAnalytics(configuration.analytics)
         initializeAdjust(configuration.adjust)
         primeRemoteConfig(configuration.primeRemoteConfig)
         Logger.adsKitConfigure.info("done (sync portion)")
@@ -137,6 +143,7 @@ public enum AdsKit {
             if case .enabled = configuration.facebook { return true } else { return false }
         }()
         let adjustDispatched = configuration.adjust != nil
+        let analyticsDispatched = configuration.analytics != nil
         let remoteConfigPrimed = configuration.primeRemoteConfig
         @Dependency(\.analyticClient) var analyticClient
         Task {
@@ -147,6 +154,7 @@ public enum AdsKit {
                 "configured_firebase": .bool(firebaseConfigured),
                 "facebook_enabled": .bool(facebookEnabled),
                 "adjust_dispatched": .bool(adjustDispatched),
+                "analytics_dispatched": .bool(analyticsDispatched),
                 "remote_config_primed": .bool(remoteConfigPrimed),
             ])
             Logger.adsKitConfigure.notice("telemetry: adskit_configure_success emitted")
@@ -266,6 +274,21 @@ public enum AdsKit {
         #else
         Logger.adsKitConfigure.info("facebook — FacebookCore not linked, skipped")
         #endif
+    }
+
+    private static func initializeAnalytics(_ config: AnalyticConfig?) {
+        guard let config else {
+            Logger.adsKitConfigure.info("analytics — skipped (no config)")
+            return
+        }
+        Logger.adsKitConfigure.info(
+            "analytics — initialize dispatched (collectionEnabled=\(config.collectionEnabled, privacy: .public), userID=\(config.userID ?? "nil", privacy: .public), properties=\(config.userProperties.count, privacy: .public))"
+        )
+        @Dependency(\.analyticClient) var analyticClient
+        Task {
+            await analyticClient.initialize(config)
+            Logger.adsKitConfigure.info("analytics — initialize completed")
+        }
     }
 
     private static func initializeAdjust(_ config: AdjustConfig?) {
