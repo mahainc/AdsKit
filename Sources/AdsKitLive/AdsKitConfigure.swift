@@ -13,6 +13,7 @@
 //
 
 import AdjustClient
+@preconcurrency import AdjustSdk
 import AnalyticClient
 import ComposableArchitecture
 import FirebaseCore
@@ -76,11 +77,17 @@ public enum AdsKit {
 
             let appToken = Bundle.main.object(forInfoDictionaryKey: "AdjustAppToken") as? String ?? ""
             let revenueToken = Bundle.main.object(forInfoDictionaryKey: "AdjustRevenueEventToken") as? String
+            #if DEBUG
+            let adjustLogLevel: AdjustClient.LogLevel = .verbose
+            #else
+            let adjustLogLevel: AdjustClient.LogLevel = .warn
+            #endif
             let adjust: AdjustConfig? = appToken.isEmpty
                 ? nil
                 : AdjustConfig(
                     appToken: appToken,
                     environment: adjustEnvironment,
+                    logLevel: adjustLogLevel,
                     revenueEventToken: revenueToken?.isEmpty == true ? nil : revenueToken
                 )
 
@@ -146,20 +153,50 @@ public enum AdsKit {
         }
     }
 
-    /// Forward URL opens to Facebook's URL handler. Returns `true` if Facebook handled the URL.
-    /// Safe to call when `FacebookCore` is not linked — returns `false`.
+    /// Forwards custom-URL-scheme opens to Facebook (return value) and to Adjust
+    /// (fire-and-forget — Adjust handles deep links independently of the host's
+    /// open-URL return value). Without this, Adjust attribution for paid links
+    /// using the app's URL scheme breaks.
+    ///
+    /// Returns `true` if Facebook handled the URL; otherwise `false`. Safe to
+    /// call when `FacebookCore` is not linked — returns `false`.
     @MainActor
     public static func application(
         _ app: UIApplication,
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any]
     ) -> Bool {
+        if let deeplink = ADJDeeplink(deeplink: url) {
+            Adjust.processDeeplink(deeplink)
+        }
         #if canImport(FacebookCore)
         if ApplicationDelegate.shared.application(app, open: url, options: options) {
             return true
         }
         #endif
         return false
+    }
+
+    /// Forwards Universal Link activations to Adjust. Call from
+    /// `application(_:continue:restorationHandler:)` (UIKit) or from
+    /// `scene(_:continue:)` / `scene(_:willConnectTo:options:)`'s
+    /// `userActivities` on cold launch. Returns `true` if a `webpageURL` was
+    /// present and forwarded — host may still chain its own deep-link routing.
+    @MainActor
+    @discardableResult
+    public static func application(
+        _ app: UIApplication,
+        continue userActivity: NSUserActivity
+    ) -> Bool {
+        guard
+            userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+            let url = userActivity.webpageURL,
+            let deeplink = ADJDeeplink(deeplink: url)
+        else {
+            return false
+        }
+        Adjust.processDeeplink(deeplink)
+        return true
     }
 
     // MARK: - Private
