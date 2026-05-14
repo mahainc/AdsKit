@@ -41,23 +41,20 @@ let package = Package(
                 .product(name: "AdjustClientLive", package: "AdjustClient"),
                 .product(name: "AnalyticClientLive", package: "AnalyticClient"),
                 .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
-                // Wrapper target — drags `GoogleAppMeasurementIdentitySupport.framework`
-                // into the bundle so the linker flag below can find it.
                 .product(name: "FirebaseAnalyticsIdentitySupport", package: "firebase-ios-sdk"),
                 .product(name: "FacebookCore", package: "facebook-ios-sdk"),
                 "AdsKit",
             ],
             linkerSettings: [
-                // Force-link `GoogleAppMeasurementIdentitySupport.framework` so
-                // dyld actually loads it at startup. Without this, the framework
-                // is bundled into Frameworks/ but has no `LC_LOAD_DYLIB` entry —
-                // Firebase Analytics then logs `I-ACS044003: IDFA will not be
-                // accessible`.
-                //
-                // `-framework` alone is insufficient: modern linkers omit the load
-                // command when no symbol is referenced (dead-strip-linkage).
-                // `-needed_framework` forces the LC_LOAD_DYLIB unconditionally.
-                .unsafeFlags(["-Xlinker", "-needed_framework", "-Xlinker", "GoogleAppMeasurementIdentitySupport"]),
+                // Force the host app's link step to pull `APMPlatformIdentitySupport.o` out
+                // of the GoogleAppMeasurementIdentitySupport static archive. Without this
+                // reference the linker dead-strips the whole archive (no symbol from it is
+                // used by Swift code), and Firebase Analytics logs I-ACS044003 / "IDFA will
+                // not be accessible" at runtime.
+                .unsafeFlags([
+                    "-Xlinker", "-u",
+                    "-Xlinker", "_OBJC_CLASS_$_APMPlatformIdentitySupport",
+                ]),
             ]
         ),
     ]
