@@ -6,14 +6,15 @@
 //  (synchronous), Facebook (synchronous, canImport-gated), Adjust SDK init
 //  (fire-and-forget Task), and Remote Config priming (background Task).
 //
-//  ATT, UMP, ad preloads, and the splash ad remain in `AdsBootstrap` — they
-//  are user-visible flows that belong on the splash screen, not at launch.
+//  Post-init operations — ATT, UMP, ad preloads, the splash ad, deep-link
+//  forwarding, runtime ad shows — live behind `@Dependency(\.adsKitClient)`
+//  so a single test override swaps the whole pipeline. `AdsBootstrap` is the
+//  TCA reducer wrapper over the client's splash-time pipeline.
 //
 //  Filter traces in Console.app with `subsystem:com.mahainc.AdsKit`.
 //
 
 import AdjustClient
-@preconcurrency import AdjustSdk
 import AnalyticClient
 import ComposableArchitecture
 import FirebaseCore
@@ -151,60 +152,14 @@ public enum AdsKit {
             // drops anything starting with it (logs I-ACS013008). Use a non-reserved
             // form so the param survives into the Firebase Analytics report.
             await analyticClient.trackEvent("adskit_configure_success", [
-                "configured_firebase": .bool(firebaseConfigured),
-                "facebook_enabled": .bool(facebookEnabled),
+                "firebase_dispatched": .bool(firebaseConfigured),
+                "facebook_dispatched": .bool(facebookEnabled),
                 "adjust_dispatched": .bool(adjustDispatched),
                 "analytics_dispatched": .bool(analyticsDispatched),
-                "remote_config_primed": .bool(remoteConfigPrimed),
+                "remote_config_dispatched": .bool(remoteConfigPrimed),
             ])
             Logger.adsKitConfigure.notice("telemetry: adskit_configure_success emitted")
         }
-    }
-
-    /// Forwards custom-URL-scheme opens to Facebook (return value) and to Adjust
-    /// (fire-and-forget — Adjust handles deep links independently of the host's
-    /// open-URL return value). Without this, Adjust attribution for paid links
-    /// using the app's URL scheme breaks.
-    ///
-    /// Returns `true` if Facebook handled the URL; otherwise `false`. Safe to
-    /// call when `FacebookCore` is not linked — returns `false`.
-    @MainActor
-    public static func application(
-        _ app: UIApplication,
-        open url: URL,
-        options: [UIApplication.OpenURLOptionsKey: Any]
-    ) -> Bool {
-        if let deeplink = ADJDeeplink(deeplink: url) {
-            Adjust.processDeeplink(deeplink)
-        }
-        #if canImport(FacebookCore)
-        if ApplicationDelegate.shared.application(app, open: url, options: options) {
-            return true
-        }
-        #endif
-        return false
-    }
-
-    /// Forwards Universal Link activations to Adjust. Call from
-    /// `application(_:continue:restorationHandler:)` (UIKit) or from
-    /// `scene(_:continue:)` / `scene(_:willConnectTo:options:)`'s
-    /// `userActivities` on cold launch. Returns `true` if a `webpageURL` was
-    /// present and forwarded — host may still chain its own deep-link routing.
-    @MainActor
-    @discardableResult
-    public static func application(
-        _ app: UIApplication,
-        continue userActivity: NSUserActivity
-    ) -> Bool {
-        guard
-            userActivity.activityType == NSUserActivityTypeBrowsingWeb,
-            let url = userActivity.webpageURL,
-            let deeplink = ADJDeeplink(deeplink: url)
-        else {
-            return false
-        }
-        Adjust.processDeeplink(deeplink)
-        return true
     }
 
     // MARK: - Private
@@ -229,11 +184,11 @@ public enum AdsKit {
                 // even when assertionFailure is a no-op in Release.
                 @Dependency(\.analyticClient) var analyticClient
                 Task {
-                    await analyticClient.trackEvent("adskit_configure_error", [
+                    await analyticClient.trackEvent("adskit_configure_failed", [
                         "reason": "firebase_plist_missing",
                         "plist_name": .string(name),
                     ])
-                    Logger.adsKitConfigure.notice("telemetry: adskit_configure_error emitted (firebase_plist_missing)")
+                    Logger.adsKitConfigure.notice("telemetry: adskit_configure_failed emitted (firebase_plist_missing)")
                 }
                 assertionFailure("[AdsKit] Missing \(name).plist in main bundle")
                 return

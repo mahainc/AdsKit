@@ -5,6 +5,12 @@
 //  Two categories scope the noise: `configure` is launch-time (one-shot),
 //  `bootstrap` is splash-time (per-launch sequence).
 //
+//  Level convention (apply consistently across both categories):
+//    - `.debug`   — internal state transitions of no operational interest (e.g. "already configured, skipping").
+//    - `.info`    — phase entry / step dispatched (the steady-state happy-path narrative).
+//    - `.notice`  — telemetry emission + non-fatal recoveries the operator should see.
+//    - `.error`   — failures that abort the current flow.
+//
 
 import OSLog
 
