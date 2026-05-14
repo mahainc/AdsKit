@@ -16,6 +16,8 @@ let package = Package(
         .package(url: "https://github.com/mahainc/UMPClient.git", branch: "main"),
         .package(url: "https://github.com/mahainc/AdjustClient.git", branch: "master"),
         .package(url: "https://github.com/mahainc/AnalyticClient.git", branch: "master"),
+        .package(url: "https://github.com/firebase/firebase-ios-sdk.git", branch: "main"),
+        .package(url: "https://github.com/facebook/facebook-ios-sdk.git", from: "17.0.0"),
     ],
     targets: [
         .target(
@@ -38,6 +40,8 @@ let package = Package(
                 .product(name: "UMPClientLive", package: "UMPClient"),
                 .product(name: "AdjustClientLive", package: "AdjustClient"),
                 .product(name: "AnalyticClientLive", package: "AnalyticClient"),
+                .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
+                .product(name: "FacebookCore", package: "facebook-ios-sdk"),
                 "AdsKit",
             ]
         ),
