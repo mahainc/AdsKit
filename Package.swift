@@ -41,6 +41,9 @@ let package = Package(
                 .product(name: "AdjustClientLive", package: "AdjustClient"),
                 .product(name: "AnalyticClientLive", package: "AnalyticClient"),
                 .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
+                // Linker-only — enables IDFA collection for Firebase Analytics
+                // when ATT is granted. No `import` needed in source files.
+                .product(name: "FirebaseAnalyticsIdentitySupport", package: "firebase-ios-sdk"),
                 .product(name: "FacebookCore", package: "facebook-ios-sdk"),
                 "AdsKit",
             ]
