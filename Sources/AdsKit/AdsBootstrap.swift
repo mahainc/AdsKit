@@ -1,20 +1,9 @@
-//
-//  AdsBootstrap.swift
-//  AdsKit
-//
-//  TCA reducer that replaces the imperative `SplashView.task { await … }` chain.
-//  Each phase is explicit in state, individually testable with `TestStore`, and
-//  observable so the splash UI can render progress labels.
-//
-//  Sequence is fixed: ATT → preload → UMP → Adjust → revenue bridge → show splash ad.
-//  Remote Config is the caller's responsibility — fetch + gate before starting.
-//
-
 import ComposableArchitecture
 import MobileAdsClient
 import UMPClient
 import AdjustClient
 import AnalyticClient
+import OSLog
 
 @Reducer
 public struct AdsBootstrap: Sendable {
@@ -50,17 +39,13 @@ public struct AdsBootstrap: Sendable {
         }
 
         public var phase: Phase
-        public var consentStatus: UMPConsentStatus
 
-        public init(phase: Phase = .idle, consentStatus: UMPConsentStatus = .unknown) {
+        public init(phase: Phase = .idle) {
             self.phase = phase
-            self.consentStatus = consentStatus
         }
     }
 
     public struct Config: Sendable {
-        /// Discriminated choice of the ad shown at splash end. Awaited in-band —
-        /// `phase` does not advance to `.done` until the ad dismisses.
         public enum SplashAd: Sendable {
             case appOpen(String)
             case interstitial(String)
@@ -68,35 +53,14 @@ public struct AdsBootstrap: Sendable {
         }
 
         public let adjust: AdjustConfig
-        /// Forwarded to `UMPClient.requestConsentIfNeeded(_:)`. Defaults to
-        /// `UMPConfig()` (production: no forced EEA, no test devices). Pass a
-        /// custom `UMPConfig(testDeviceIdentifiers: […])` for per-device QA on
-        /// Release builds, or `UMPConfig(forceConsentFormForQA: true)` as a
-        /// temporary global kill-switch for TestFlight UMP verification. Ignored
-        /// when `enableUMP` is `false`.
         public let ump: UMPConfig
-        /// Splash-end ad. Pass `.none` to skip the show phase.
         public let splashAd: SplashAd
-        /// Caller-supplied closure that preloads every ad the app will need
-        /// during and after the session (splash ad + resume + reward + inter
-        /// pool, etc.). Runs during `.preloading`, awaited in-band so UMP and
-        /// the splash show only start after preloads settle.
         public let preloads: @Sendable () async -> Void
-        /// When `false`, skip UMP consent entirely (useful in regions where UMP isn't required).
         public let enableUMP: Bool
-        /// When `false`, skip `AdjustClient.initialize(_:)`. The RevenueBridge step still runs;
-        /// calls to `adjustClient.trackRevenue` will no-op if Adjust wasn't initialised.
         public let enableAdjust: Bool
-        /// When `false`, don't register as the ads_swift `AdRevenueDelegate`. Revenue events
-        /// from ad impressions won't be forwarded to Adjust / Analytics.
         public let enableRevenueBridge: Bool
-        /// When `false`, skip installing the background→foreground app-open
-        /// resume-ad observer. Defaults to `true`.
         public let enableResumeAdHandler: Bool
-        /// Returns the *current* premium state on each willEnterForeground.
-        /// Forwarded to `mobileAdsClient.installResumeAdHandler` so the resume
-        /// policy can short-circuit for premium users. Read at each invocation
-        /// — not captured — so in-session upgrades are respected.
+        /// Read on each willEnterForeground — not captured — so in-session upgrades are respected.
         public let isPremium: @Sendable () -> Bool
 
         public init(
@@ -124,12 +88,8 @@ public struct AdsBootstrap: Sendable {
 
     public enum Action: Sendable {
         case start(Config)
-        /// Advance to the next phase after the previous phase's async work completed.
-        /// The payload is the phase that is *about to start* (or `.done` when finished).
         case advance(State.Phase)
         case consentResolved(UMPConsentStatus)
-        /// Abort the in-flight bootstrap effect. State is not mutated — consumer views
-        /// typically dismiss after sending this.
         case cancel
         case didFail(String)
     }
@@ -141,75 +101,140 @@ public struct AdsBootstrap: Sendable {
     @Dependency(\.mobileAdsClient) var mobileAdsClient
     @Dependency(\.umpClient) var umpClient
     @Dependency(\.adjustClient) var adjustClient
+    @Dependency(\.analyticClient) var analyticClient
 
     public var body: some ReducerOf<Self> {
         Reduce { state, action in
             switch action {
             case let .start(config):
                 state.phase = .requestingATT
+                Logger.adsKitBootstrap.info("phase=requestingATT")
                 return .run { send in
-                    await mobileAdsClient.requestTrackingAuthorizationIfNeeded()
-                    await send(.advance(.preloading))
+                    let startedAt = Date()
+                    var lastPhase: State.Phase = .requestingATT
+                    var splashAdShown = false
+                    var consent: UMPConsentStatus = .unknown
 
-                    await config.preloads()
+                    do {
+                        // Reachability for the outer catch + early-cancel exit.
+                        try Task.checkCancellation()
 
-                    if config.enableUMP {
-                        await send(.advance(.requestingUMP))
-                        let consent: UMPConsentStatus
-                        do {
-                            consent = try await umpClient.requestConsentIfNeeded(config.ump)
-                        } catch {
-                            consent = .unknown
+                        await mobileAdsClient.requestTrackingAuthorizationIfNeeded()
+                        lastPhase = .preloading
+                        Logger.adsKitBootstrap.info("phase=preloading")
+                        await send(.advance(.preloading))
+
+                        await config.preloads()
+
+                        if config.enableUMP {
+                            lastPhase = .requestingUMP
+                            Logger.adsKitBootstrap.info("phase=requestingUMP")
+                            await send(.advance(.requestingUMP))
+                            do {
+                                consent = try await umpClient.requestConsentIfNeeded(config.ump)
+                            } catch {
+                                Logger.adsKitBootstrap.notice(
+                                    "UMP form failed, defaulting to .unknown: \(error.localizedDescription, privacy: .public)"
+                                )
+                                consent = .unknown
+                            }
+                            await send(.consentResolved(consent))
                         }
-                        await send(.consentResolved(consent))
-                    }
 
-                    if config.enableAdjust {
-                        await send(.advance(.initializingAdjust))
-                        await adjustClient.initialize(config.adjust)
-                    }
-
-                    if config.enableRevenueBridge {
-                        await send(.advance(.installingRevenueBridge))
-                        await mobileAdsClient.installRevenueBridge()
-                    }
-
-                    if config.enableResumeAdHandler {
-                        await send(.advance(.installingResumeAdHandler))
-                        await mobileAdsClient.installResumeAdHandler(config.isPremium)
-                    }
-
-                    await send(.advance(.showingSplashAd))
-                    // `shouldShowAd` auto-loads into the actor's ad cache that
-                    // `showAd` reads from. The caller's `preloads` closure uses
-                    // a different (legacy ads_swift) pool that `showAd` doesn't
-                    // see, so without this gate the splash ad would throw
-                    // `adNotReady` and `try?` would silently swallow it.
-                    switch config.splashAd {
-                    case let .appOpen(unitID):
-                        if await mobileAdsClient.shouldShowAd(.appOpen(unitID), []) {
-                            try? await mobileAdsClient.showAd(.appOpen(unitID))
+                        if config.enableAdjust {
+                            lastPhase = .initializingAdjust
+                            Logger.adsKitBootstrap.info("phase=initializingAdjust")
+                            await send(.advance(.initializingAdjust))
+                            await adjustClient.initialize(config.adjust)
                         }
-                    case let .interstitial(unitID):
-                        if await mobileAdsClient.shouldShowAd(.interstitial(unitID), []) {
-                            try? await mobileAdsClient.showAd(.interstitial(unitID))
-                        }
-                    case .none:
-                        break
-                    }
 
-                    await send(.advance(.done))
+                        if config.enableRevenueBridge {
+                            lastPhase = .installingRevenueBridge
+                            Logger.adsKitBootstrap.info("phase=installingRevenueBridge")
+                            await send(.advance(.installingRevenueBridge))
+                            await mobileAdsClient.installRevenueBridge()
+                        }
+
+                        if config.enableResumeAdHandler {
+                            lastPhase = .installingResumeAdHandler
+                            Logger.adsKitBootstrap.info("phase=installingResumeAdHandler")
+                            await send(.advance(.installingResumeAdHandler))
+                            await mobileAdsClient.installResumeAdHandler(config.isPremium)
+                        }
+
+                        lastPhase = .showingSplashAd
+                        Logger.adsKitBootstrap.info("phase=showingSplashAd")
+                        await send(.advance(.showingSplashAd))
+                        // `shouldShowAd` auto-loads into the actor cache that `showAd` reads from;
+                        // `config.preloads` uses a different (legacy ads_swift) pool that `showAd`
+                        // does not see, so without this gate the splash ad throws `.adNotReady`.
+                        switch config.splashAd {
+                        case let .appOpen(unitID):
+                            if await mobileAdsClient.shouldShowAd(.appOpen(unitID), []) {
+                                do {
+                                    try await mobileAdsClient.showAd(.appOpen(unitID))
+                                    splashAdShown = true
+                                } catch {
+                                    Logger.adsKitBootstrap.notice(
+                                        "splash appOpen show failed (non-fatal): \(error.localizedDescription, privacy: .public)"
+                                    )
+                                }
+                            }
+                        case let .interstitial(unitID):
+                            if await mobileAdsClient.shouldShowAd(.interstitial(unitID), []) {
+                                do {
+                                    try await mobileAdsClient.showAd(.interstitial(unitID))
+                                    splashAdShown = true
+                                } catch {
+                                    Logger.adsKitBootstrap.notice(
+                                        "splash interstitial show failed (non-fatal): \(error.localizedDescription, privacy: .public)"
+                                    )
+                                }
+                            }
+                        case .none:
+                            break
+                        }
+
+                        lastPhase = .done
+                        Logger.adsKitBootstrap.info("phase=done")
+                        await send(.advance(.done))
+
+                        let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                        await analyticClient.trackEvent("adskit_bootstrap_success", [
+                            "duration_ms": .int(durationMs),
+                            "ump_enabled": .bool(config.enableUMP),
+                            "adjust_enabled": .bool(config.enableAdjust),
+                            "splash_ad_shown": .bool(splashAdShown),
+                            "consent": .string(String(describing: consent)),
+                        ])
+                        Logger.adsKitBootstrap.notice(
+                            "telemetry: adskit_bootstrap_success emitted (duration_ms=\(durationMs), splash_ad_shown=\(splashAdShown))"
+                        )
+                    } catch is CancellationError {
+                        Logger.adsKitBootstrap.debug("bootstrap cancelled")
+                    } catch {
+                        Logger.adsKitBootstrap.error(
+                            "bootstrap failed at phase=\(lastPhase.description, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                        )
+                        // Emit before `.didFail` so the event captures the phase active at the throw site.
+                        await analyticClient.trackEvent("adskit_bootstrap_failed", [
+                            "phase": .string(lastPhase.description),
+                            "reason": .string(error.localizedDescription),
+                        ])
+                        Logger.adsKitBootstrap.notice(
+                            "telemetry: adskit_bootstrap_failed emitted (phase=\(lastPhase.description, privacy: .public))"
+                        )
+                        await send(.didFail(error.localizedDescription))
+                    }
                 }
                 .cancellable(id: CancelID.bootstrap)
 
             case let .advance(phase):
-                // Advance only if we haven't failed out of the flow.
                 if case .failed = state.phase { return .none }
                 state.phase = phase
                 return .none
 
-            case let .consentResolved(status):
-                state.consentStatus = status
+            case .consentResolved:
                 return .none
 
             case .cancel:
