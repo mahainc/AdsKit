@@ -12,6 +12,6 @@ extension Logger {
     /// Launch-time orchestration (`AdsKit.configure(...)`).
     public static let adsKitConfigure = Logger(subsystem: "com.mahainc.AdsKit", category: "configure")
 
-    /// Splash-time bootstrap sequence (`AdsBootstrap` reducer).
+    /// Splash-time bootstrap sequence (`AdsKit.Bootstrap` reducer).
     public static let adsKitBootstrap = Logger(subsystem: "com.mahainc.AdsKit", category: "bootstrap")
 }

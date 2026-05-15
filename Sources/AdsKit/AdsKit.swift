@@ -15,3 +15,9 @@
 @_exported import UMPClient
 @_exported import AdjustClient
 @_exported import AnalyticClient
+
+/// Single namespace for AdsKit's public API.
+/// - SDK-free members (the `Bootstrap` reducer) live in this target.
+/// - SDK-bound members (`configure(...)`, deep-link forwarders, `LaunchConfiguration`)
+///   are added by `AdsKitLive` as extensions on this enum.
+public enum AdsKit {}

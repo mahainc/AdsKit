@@ -1,5 +1,5 @@
 {
-  "originHash" : "d017d4bedbeb9920b84291cb0dea26ce52c393709da3e797e5250e76a869fca5",
+  "originHash" : "5592f71e0b6d50659fc1b3dba6866ff5d4b3d69a4426510246e46101521e1d10",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -196,7 +196,7 @@
       "location" : "https://github.com/mahainc/RemoteConfigClient.git",
       "state" : {
         "branch" : "master",
-        "revision" : "6bd08cb052f5e01afc7975eaf9eeb1383cd1498b"
+        "revision" : "fcbf3f0522af3d3b21ce3233834f5b83f6a4e11c"
       }
     },
     {
