@@ -16,7 +16,7 @@ let package = Package(
         .package(url: "https://github.com/mahainc/UMPClient.git", branch: "main"),
         .package(url: "https://github.com/mahainc/AdjustClient.git", branch: "master"),
         .package(url: "https://github.com/mahainc/AnalyticClient.git", branch: "master"),
-        .package(url: "https://github.com/firebase/firebase-ios-sdk.git", branch: "main"),
+        .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "12.13.0"),
         .package(url: "https://github.com/facebook/facebook-ios-sdk.git", from: "17.0.0"),
     ],
     targets: [
