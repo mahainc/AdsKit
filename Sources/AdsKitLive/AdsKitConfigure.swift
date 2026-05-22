@@ -54,26 +54,19 @@ extension AdsKit {
         public var adjust: AdjustConfig?
         public var analytics: AnalyticConfig?
         public var enableRevenueBridge: Bool
-        public var enableResumeAdHandler: Bool
-        /// Read on each willEnterForeground — not captured — so in-session upgrades are respected.
-        public var isPremium: @Sendable () -> Bool
 
         public init(
             firebase: Firebase? = nil,
             facebook: Facebook = .enabled,
             adjust: AdjustConfig? = nil,
             analytics: AnalyticConfig? = AnalyticConfig(),
-            enableRevenueBridge: Bool = true,
-            enableResumeAdHandler: Bool = true,
-            isPremium: @escaping @Sendable () -> Bool = { false }
+            enableRevenueBridge: Bool = true
         ) {
             self.firebase = firebase
             self.facebook = facebook
             self.adjust = adjust
             self.analytics = analytics
             self.enableRevenueBridge = enableRevenueBridge
-            self.enableResumeAdHandler = enableResumeAdHandler
-            self.isPremium = isPremium
         }
 
         /// Convenience constructor for hosts that wire AdsKit by Info.plist convention:
@@ -83,9 +76,7 @@ extension AdsKit {
         ///   `.sandbox` in DEBUG, `.production` otherwise. Skipped when the token is missing/empty.
         public static func fromInfoPlist(
             firebasePlistPrefix: String = "GoogleService-Info",
-            enableRevenueBridge: Bool = true,
-            enableResumeAdHandler: Bool = true,
-            isPremium: @escaping @Sendable () -> Bool = { false }
+            enableRevenueBridge: Bool = true
         ) -> LaunchConfiguration {
             #if DEBUG
             let plistName = "\(firebasePlistPrefix)-Debug"
@@ -116,9 +107,7 @@ extension AdsKit {
                 facebook: .enabled,
                 adjust: adjust,
                 analytics: AnalyticConfig(),
-                enableRevenueBridge: enableRevenueBridge,
-                enableResumeAdHandler: enableResumeAdHandler,
-                isPremium: isPremium
+                enableRevenueBridge: enableRevenueBridge
             )
         }
     }
@@ -147,7 +136,7 @@ extension AdsKit {
     ///        other step runs.
     ///   2. Facebook activateApp (synchronous; canImport(FacebookCore)-gated)
     ///   3. Analytics.initialize (fire-and-forget Task; must run after Firebase)
-    ///   4. Adjust.initialize → installRevenueBridge → installResumeAdHandler
+    ///   4. Adjust.initialize → installRevenueBridge
     ///      (single chained background Task; per-step outcomes accumulate on a
     ///      static and are returned by `adRevenueChainReady()`)
     ///   5. Remote Config prime (fire-and-forget Task.detached)
@@ -188,9 +177,7 @@ extension AdsKit {
         initializeAnalytics(configuration.analytics, firebaseReady: firebaseReady)
         startAdjustChain(
             configuration.adjust,
-            enableRevenueBridge: configuration.enableRevenueBridge,
-            enableResumeAdHandler: configuration.enableResumeAdHandler,
-            isPremium: configuration.isPremium
+            enableRevenueBridge: configuration.enableRevenueBridge
         )
         Logger.adsKitConfigure.info("done (sync portion)")
 
@@ -203,7 +190,6 @@ extension AdsKit {
         let adjustDispatched = configuration.adjust != nil
         let analyticsDispatched = configuration.analytics != nil
         let revenueBridgeEnabled = configuration.enableRevenueBridge
-        let resumeHandlerEnabled = configuration.enableResumeAdHandler
         @Dependency(\.analyticClient) var analyticClient
         Task {
             // Firebase reserves the `firebase_` param-name prefix and silently
@@ -215,7 +201,6 @@ extension AdsKit {
                 "adjust_dispatched": .bool(adjustDispatched),
                 "analytics_dispatched": .bool(analyticsDispatched),
                 "revenue_bridge_enabled": .bool(revenueBridgeEnabled),
-                "resume_handler_enabled": .bool(resumeHandlerEnabled),
             ])
             Logger.adsKitConfigure.notice("telemetry: adskit_configure_success emitted")
         }
@@ -360,15 +345,15 @@ extension AdsKit {
         }
     }
 
-    /// Single chained Task: Adjust init → installRevenueBridge → installResumeAdHandler.
+    /// Single chained Task: Adjust init → installRevenueBridge.
     /// `installRevenueBridge` forwards paid events to Adjust, so it must observe a
-    /// ready Adjust SDK — hence the chain rather than parallel Tasks.
+    /// ready Adjust SDK — hence the chain rather than parallel Tasks. The
+    /// app-open resume handler is installed by the host app (AdsKit no longer
+    /// owns the Remote Config schema that drives its policy).
     @MainActor
     private static func startAdjustChain(
         _ adjust: AdjustConfig?,
-        enableRevenueBridge: Bool,
-        enableResumeAdHandler: Bool,
-        isPremium: @escaping @Sendable () -> Bool
+        enableRevenueBridge: Bool
     ) {
         if let adjust {
             Logger.adsKitConfigure.info(
@@ -390,7 +375,6 @@ extension AdsKit {
             let startedAt = Date()
             var adjustInitialized = false
             var revenueBridgeInstalled = false
-            var resumeHandlerInstalled = false
 
             // TODO: AdjustClient / MobileAdsClient calls below are non-throwing,
             // so the `*_initialized` / `*_installed` booleans record only that
@@ -408,25 +392,17 @@ extension AdsKit {
                 await MainActor.run { Self.outcome.revenueBridge = true }
                 Logger.adsKitConfigure.info("revenue bridge — install completed")
             }
-            if enableResumeAdHandler, snapshot.resumeHandler != true {
-                Logger.adsKitConfigure.info("resume ad handler — install dispatched")
-                await mobileAdsClient.installResumeAdHandler(isPremium)
-                resumeHandlerInstalled = true
-                await MainActor.run { Self.outcome.resumeHandler = true }
-                Logger.adsKitConfigure.info("resume ad handler — install completed")
-            }
 
             let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
             // `was_noop` distinguishes a successful chain (all true) from a retry
             // where every step was already done in a prior call (all false because
             // the snapshot guard skipped them). Without this flag a dashboard
-            // sees three `false`s and misreads it as total failure.
-            let wasNoop = !adjustInitialized && !revenueBridgeInstalled && !resumeHandlerInstalled
+            // sees two `false`s and misreads it as total failure.
+            let wasNoop = !adjustInitialized && !revenueBridgeInstalled
             await analyticClient.trackEvent("adskit_configure_chain_completed", [
                 "duration_ms": .int(durationMs),
                 "adjust_initialized": .bool(adjustInitialized),
                 "revenue_bridge_installed": .bool(revenueBridgeInstalled),
-                "resume_handler_installed": .bool(resumeHandlerInstalled),
                 "was_noop": .bool(wasNoop),
             ])
             Logger.adsKitConfigure.notice(
