@@ -51,14 +51,14 @@ extension AdsKit {
 
         public var firebase: Firebase?
         public var facebook: Facebook
-        public var adjust: AdjustConfig?
+        public var adjust: AdjustClient.Config?
         public var analytics: AnalyticConfig?
         public var enableRevenueBridge: Bool
 
         public init(
             firebase: Firebase? = nil,
             facebook: Facebook = .enabled,
-            adjust: AdjustConfig? = nil,
+            adjust: AdjustClient.Config? = nil,
             analytics: AnalyticConfig? = AnalyticConfig(),
             enableRevenueBridge: Bool = true
         ) {
@@ -93,9 +93,9 @@ extension AdsKit {
             #else
             let adjustLogLevel: AdjustClient.LogLevel = .warn
             #endif
-            let adjust: AdjustConfig? = appToken.isEmpty
+            let adjust: AdjustClient.Config? = appToken.isEmpty
                 ? nil
-                : AdjustConfig(
+                : AdjustClient.Config(
                     appToken: appToken,
                     environment: adjustEnvironment,
                     logLevel: adjustLogLevel,
@@ -352,7 +352,7 @@ extension AdsKit {
     /// owns the Remote Config schema that drives its policy).
     @MainActor
     private static func startAdjustChain(
-        _ adjust: AdjustConfig?,
+        _ adjust: AdjustClient.Config?,
         enableRevenueBridge: Bool
     ) {
         if let adjust {
