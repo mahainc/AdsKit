@@ -113,14 +113,6 @@ extension AdsKit {
         @Dependency(\.analyticClient) var analyticClient
         @Dependency(\.remoteConfigClient) var remoteConfigClient
 
-        private static func stateString(_ value: Bool?) -> String {
-            switch value {
-            case .none: return "skipped"
-            case .some(true): return "succeeded"
-            case .some(false): return "failed"
-            }
-        }
-
         public var body: some ReducerOf<Self> {
             Reduce { state, action in
                 switch action {
@@ -145,6 +137,7 @@ extension AdsKit {
                             if config.primeRemoteConfig {
                                 Logger.adsKitBootstrap.info("remoteConfig — prime dispatched")
                                 await remoteConfigClient.fetchAndActivateOrUseCache()
+                                await ConfigureCoordinator.shared.setRemoteConfig(.succeeded)
                                 Logger.adsKitBootstrap.info("remoteConfig — prime completed")
                             }
 
@@ -175,6 +168,12 @@ extension AdsKit {
                                 await send(.advance(.requestingUMP))
                                 do {
                                     consent = try await umpClient.requestConsentIfNeeded(config.ump)
+                                } catch is CancellationError {
+                                    // Re-throw so the outer `catch is CancellationError`
+                                    // halts the bootstrap effect cleanly. Without this
+                                    // re-throw, `.cancel` during the UMP step was
+                                    // swallowed and the effect continued to `.done`.
+                                    throw CancellationError()
                                 } catch {
                                     Logger.adsKitBootstrap.notice(
                                         "UMP form failed, defaulting to .unknown: \(error.localizedDescription, privacy: .public)"
@@ -236,10 +235,12 @@ extension AdsKit {
                                 "ump_enabled": .bool(config.enableUMP),
                                 "splash_ad_shown": .bool(splashAdShown),
                                 "consent": .string(String(describing: consent)),
-                                "configure_firebase": .string(Self.stateString(configureOutcome.firebase)),
-                                "configure_adjust": .string(Self.stateString(configureOutcome.adjust)),
-                                "configure_revenue_bridge": .string(Self.stateString(configureOutcome.revenueBridge)),
-                                "configure_resume_handler": .string(Self.stateString(configureOutcome.resumeHandler)),
+                                "configure_firebase": .string(configureOutcome.firebase.telemetryName),
+                                "configure_facebook": .string(configureOutcome.facebook.telemetryName),
+                                "configure_analytics": .string(configureOutcome.analytics.telemetryName),
+                                "configure_adjust": .string(configureOutcome.adjust.telemetryName),
+                                "configure_revenue_bridge": .string(configureOutcome.revenueBridge.telemetryName),
+                                "configure_remote_config": .string(configureOutcome.remoteConfig.telemetryName),
                             ])
                             Logger.adsKitBootstrap.notice(
                                 "telemetry: adskit_bootstrap_success emitted (duration_ms=\(durationMs), splash_ad_shown=\(splashAdShown))"
@@ -254,10 +255,12 @@ extension AdsKit {
                             await analyticClient.trackEvent("adskit_bootstrap_failed", [
                                 "phase": .string(lastPhase.description),
                                 "reason": .string(error.localizedDescription),
-                                "configure_firebase": .string(Self.stateString(configureOutcome.firebase)),
-                                "configure_adjust": .string(Self.stateString(configureOutcome.adjust)),
-                                "configure_revenue_bridge": .string(Self.stateString(configureOutcome.revenueBridge)),
-                                "configure_resume_handler": .string(Self.stateString(configureOutcome.resumeHandler)),
+                                "configure_firebase": .string(configureOutcome.firebase.telemetryName),
+                                "configure_facebook": .string(configureOutcome.facebook.telemetryName),
+                                "configure_analytics": .string(configureOutcome.analytics.telemetryName),
+                                "configure_adjust": .string(configureOutcome.adjust.telemetryName),
+                                "configure_revenue_bridge": .string(configureOutcome.revenueBridge.telemetryName),
+                                "configure_remote_config": .string(configureOutcome.remoteConfig.telemetryName),
                             ])
                             Logger.adsKitBootstrap.notice(
                                 "telemetry: adskit_bootstrap_failed emitted (phase=\(lastPhase.description, privacy: .public))"

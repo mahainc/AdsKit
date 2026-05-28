@@ -18,6 +18,7 @@ let package = Package(
         .package(url: "https://github.com/mahainc/AnalyticClient.git", from: "1.1.0"),
         .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "12.13.0"),
         .package(url: "https://github.com/facebook/facebook-ios-sdk.git", from: "17.0.0"),
+        .package(url: "https://github.com/pointfreeco/swift-composable-architecture.git", from: "1.25.5"),
     ],
     targets: [
         .target(
@@ -28,6 +29,7 @@ let package = Package(
                 .product(name: "UMPClient", package: "UMPClient"),
                 .product(name: "AdjustClient", package: "AdjustClient"),
                 .product(name: "AnalyticClient", package: "AnalyticClient"),
+                .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
             ]
         ),
         .target(
@@ -55,6 +57,13 @@ let package = Package(
                     "-Xlinker", "-u",
                     "-Xlinker", "_OBJC_CLASS_$_APMPlatformIdentitySupport",
                 ]),
+            ]
+        ),
+        .testTarget(
+            name: "AdsKitTests",
+            dependencies: [
+                "AdsKit",
+                .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
             ]
         ),
     ]

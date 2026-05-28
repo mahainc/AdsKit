@@ -23,7 +23,6 @@ import AdjustClient
 import AdsKit
 import AnalyticClient
 import ComposableArchitecture
-import FirebaseCore
 import MobileAdsClient
 import OSLog
 import RemoteConfigClient
@@ -35,95 +34,25 @@ import FacebookCore
 
 extension AdsKit {
 
-    public struct LaunchConfiguration: Sendable {
-
-        public enum Firebase: Sendable {
-            /// Read `<plistName>.plist` from `Bundle.main` and configure with its options.
-            case plistName(String)
-            /// Configure with the default `GoogleService-Info.plist` lookup.
-            case defaultPlist
-        }
-
-        public enum Facebook: Sendable {
-            case enabled
-            case disabled
-        }
-
-        public var firebase: Firebase?
-        public var facebook: Facebook
-        public var adjust: AdjustClient.Config?
-        public var analytics: AnalyticConfig?
-        public var enableRevenueBridge: Bool
-
-        public init(
-            firebase: Firebase? = nil,
-            facebook: Facebook = .enabled,
-            adjust: AdjustClient.Config? = nil,
-            analytics: AnalyticConfig? = AnalyticConfig(),
-            enableRevenueBridge: Bool = true
-        ) {
-            self.firebase = firebase
-            self.facebook = facebook
-            self.adjust = adjust
-            self.analytics = analytics
-            self.enableRevenueBridge = enableRevenueBridge
-        }
-
-        /// Convenience constructor for hosts that wire AdsKit by Info.plist convention:
-        /// - Firebase: `.plistName("\(firebasePlistPrefix)-Debug")` in DEBUG, `"-Release"` otherwise.
-        /// - Facebook: `.enabled` (no-op if `FacebookCore` is not linked).
-        /// - Adjust: reads `AdjustAppToken` + `AdjustRevenueEventToken` from `Info.plist`;
-        ///   `.sandbox` in DEBUG, `.production` otherwise. Skipped when the token is missing/empty.
-        public static func fromInfoPlist(
-            firebasePlistPrefix: String = "GoogleService-Info",
-            enableRevenueBridge: Bool = true
-        ) -> LaunchConfiguration {
-            #if DEBUG
-            let plistName = "\(firebasePlistPrefix)-Debug"
-            let adjustEnvironment: AdjustClient.Environment = .sandbox
-            #else
-            let plistName = "\(firebasePlistPrefix)-Release"
-            let adjustEnvironment: AdjustClient.Environment = .production
-            #endif
-
-            let appToken = Bundle.main.object(forInfoDictionaryKey: "AdjustAppToken") as? String ?? ""
-            let revenueToken = Bundle.main.object(forInfoDictionaryKey: "AdjustRevenueEventToken") as? String
-            #if DEBUG
-            let adjustLogLevel: AdjustClient.LogLevel = .verbose
-            #else
-            let adjustLogLevel: AdjustClient.LogLevel = .warn
-            #endif
-            let adjust: AdjustClient.Config? = appToken.isEmpty
-                ? nil
-                : AdjustClient.Config(
-                    appToken: appToken,
-                    environment: adjustEnvironment,
-                    logLevel: adjustLogLevel,
-                    revenueEventToken: revenueToken?.isEmpty == true ? nil : revenueToken
-                )
-
-            return LaunchConfiguration(
-                firebase: .plistName(plistName),
-                facebook: .enabled,
-                adjust: adjust,
-                analytics: AnalyticConfig(),
-                enableRevenueBridge: enableRevenueBridge
-            )
-        }
-    }
-
     @MainActor private static var hasConfigured = false
-    @MainActor private static var adRevenueChainTask: Task<Void, Never>?
-    @MainActor private static var outcome = AdsKit.ConfigureOutcome()
 
     /// Awaits the Adjust → revenue-bridge → resume-ad-handler chain started by
     /// `configure(...)` and returns the per-step outcome. Wire into
     /// `Bootstrap.Config.configureGate` so Bootstrap can record the outcome
     /// on State and preloaded ads observe the revenue bridge.
-    @MainActor
+    ///
+    /// Returns a default `ConfigureOutcome()` (all `nil`s) if `configure(...)`
+    /// has never been called. Use `chainState()` to distinguish that case from
+    /// "ran with no-ops" when the distinction matters.
     public static func adRevenueChainReady() async -> AdsKit.ConfigureOutcome {
-        await Self.adRevenueChainTask?.value
-        return Self.outcome
+        await ConfigureCoordinator.shared.awaitChain()
+    }
+
+    /// Current lifecycle of the Adjust chain — `notStarted` before any
+    /// `configure(...)` call, `running` while the chain Task is in-flight,
+    /// `completed(outcome)` once the chain Task returns.
+    public static func chainState() async -> AdsKit.ChainState {
+        await ConfigureCoordinator.shared.currentChainState()
     }
 
     /// Single launch-time entry point. Idempotent — subsequent successful calls
@@ -155,25 +84,46 @@ extension AdsKit {
         launchOptions: [UIApplication.LaunchOptionsKey: Any]?,
         _ configuration: LaunchConfiguration = .fromInfoPlist()
     ) {
-        if hasConfigured && Self.outcome.noStepFailed {
-            Logger.adsKitConfigure.debug("already configured (no failed steps), skipping")
+        guard !hasConfigured else {
+            Logger.adsKitConfigure.debug("already configured, skipping")
             return
         }
 
         Logger.adsKitConfigure.info("start")
-        if Self.outcome.firebase != true {
-            Self.outcome.firebase = configureFirebase(configuration.firebase)
-            guard Self.outcome.firebase != false else {
-                Logger.adsKitConfigure.fault(
-                    "aborting — Firebase configuration failed; downstream init skipped"
-                )
-                return
-            }
+        @Dependency(\.firebaseConfigurator) var firebaseConfigurator
+        @Dependency(\.facebookConfigurator) var facebookConfigurator
+        let firebaseResult = AdsKit.resolveFirebaseOutcome(
+            configuration.firebase,
+            using: firebaseConfigurator
+        )
+        if firebaseResult.isSkipped {
+            Logger.adsKitConfigure.debug("firebase — skipped (nil configuration)")
+        }
+        // Persist the firebase outcome on the coordinator off-main; the value
+        // is captured for the @MainActor-side abort decision below.
+        Task { await ConfigureCoordinator.shared.setFirebase(firebaseResult) }
+        if firebaseResult.isFailed, case .plistName(let name)? = configuration.firebase {
+            emitFirebasePlistMissingTelemetry(plistName: name)
+        }
+        guard !firebaseResult.isFailed else {
+            Logger.adsKitConfigure.fault(
+                "aborting — Firebase configuration failed; downstream init skipped"
+            )
+            // Leave hasConfigured = false so the host can retry after fixing the plist.
+            return
         }
         hasConfigured = true
 
-        let firebaseReady = Self.outcome.firebase == true
-        configureFacebook(configuration.facebook, application: application, launchOptions: launchOptions)
+        let firebaseReady = firebaseResult.isSucceeded
+        let facebookStatus: AdsKit.StepStatus
+        if case .enabled = configuration.facebook {
+            facebookConfigurator.activate(application, launchOptions)
+            facebookStatus = .succeeded
+        } else {
+            Logger.adsKitConfigure.info("facebook — disabled")
+            facebookStatus = .skipped
+        }
+        Task { await ConfigureCoordinator.shared.setFacebook(facebookStatus) }
         initializeAnalytics(configuration.analytics, firebaseReady: firebaseReady)
         startAdjustChain(
             configuration.adjust,
@@ -254,78 +204,21 @@ extension AdsKit {
 
     // MARK: - Private
 
-    @MainActor
-    private static func configureFirebase(_ firebase: LaunchConfiguration.Firebase?) -> Bool? {
-        guard let firebase else {
-            Logger.adsKitConfigure.debug("firebase — skipped (nil configuration)")
-            return nil
+    private static func emitFirebasePlistMissingTelemetry(plistName: String) {
+        @Dependency(\.analyticClient) var analyticClient
+        Task {
+            await analyticClient.trackEvent("adskit_configure_error", [
+                "reason": "firebase_plist_missing",
+                "plist_name": .string(plistName),
+            ])
+            Logger.adsKitConfigure.notice("telemetry: adskit_configure_error emitted (firebase_plist_missing)")
         }
-        switch firebase {
-        case .defaultPlist:
-            FirebaseApp.configure()
-            Logger.adsKitConfigure.info("firebase — configured with default GoogleService-Info.plist")
-            return true
-        case .plistName(let name):
-            guard
-                let path = Bundle.main.path(forResource: name, ofType: "plist"),
-                let options = FirebaseOptions(contentsOfFile: path)
-            else {
-                Logger.adsKitConfigure.fault("firebase — MISSING \(name, privacy: .public).plist in main bundle")
-                // Telemetry: emit failure event so this is visible in dashboards
-                // even when assertionFailure is a no-op in Release.
-                @Dependency(\.analyticClient) var analyticClient
-                Task {
-                    await analyticClient.trackEvent("adskit_configure_error", [
-                        "reason": "firebase_plist_missing",
-                        "plist_name": .string(name),
-                    ])
-                    Logger.adsKitConfigure.notice("telemetry: adskit_configure_error emitted (firebase_plist_missing)")
-                }
-                assertionFailure("[AdsKit] Missing \(name).plist in main bundle")
-                return false
-            }
-            FirebaseApp.configure(options: options)
-            Logger.adsKitConfigure.info(
-                "firebase — configured with \(name, privacy: .public).plist (projectID=\(options.projectID ?? "?", privacy: .public))"
-            )
-            return true
-        }
-    }
-
-    @MainActor
-    private static func configureFacebook(
-        _ facebook: LaunchConfiguration.Facebook,
-        application: UIApplication,
-        launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) {
-        guard case .enabled = facebook else {
-            Logger.adsKitConfigure.info("facebook — disabled")
-            return
-        }
-        #if canImport(FacebookCore)
-        // Forward Info.plist values into FB SDK's in-memory settings BEFORE
-        // `activateApp` runs its startup `logWarnings()` — the SDK reads the
-        // backing field directly there, not the Info.plist, so without this
-        // hand-off it warns "currently set to FALSE" even when the plist says TRUE.
-        if let enabled = Bundle.main.object(forInfoDictionaryKey: "FacebookAdvertiserIDCollectionEnabled") as? Bool {
-            Settings.shared.isAdvertiserIDCollectionEnabled = enabled
-        }
-        if let enabled = Bundle.main.object(forInfoDictionaryKey: "FacebookAutoLogAppEventsEnabled") as? Bool {
-            Settings.shared.isAutoLogAppEventsEnabled = enabled
-        }
-        ApplicationDelegate.shared.application(
-            application,
-            didFinishLaunchingWithOptions: launchOptions
-        )
-        Logger.adsKitConfigure.info("facebook — activateApp dispatched (FacebookCore linked)")
-        #else
-        Logger.adsKitConfigure.info("facebook — FacebookCore not linked, skipped")
-        #endif
     }
 
     private static func initializeAnalytics(_ config: AnalyticConfig?, firebaseReady: Bool) {
         guard let config else {
             Logger.adsKitConfigure.info("analytics — skipped (no config)")
+            Task { await ConfigureCoordinator.shared.setAnalytics(.skipped) }
             return
         }
         // AnalyticClient is Firebase Analytics-backed; instantiating it before
@@ -333,6 +226,11 @@ extension AdsKit {
         // cleanly so the host can still bring up Adjust / Facebook in isolation.
         guard firebaseReady else {
             Logger.adsKitConfigure.notice("analytics — skipped (Firebase not configured)")
+            Task {
+                await ConfigureCoordinator.shared.setAnalytics(
+                    .failed(reason: "Firebase not configured")
+                )
+            }
             return
         }
         Logger.adsKitConfigure.info(
@@ -341,6 +239,7 @@ extension AdsKit {
         @Dependency(\.analyticClient) var analyticClient
         Task {
             await analyticClient.initialize(config)
+            await ConfigureCoordinator.shared.setAnalytics(.succeeded)
             Logger.adsKitConfigure.info("analytics — initialize completed")
         }
     }
@@ -350,6 +249,10 @@ extension AdsKit {
     /// ready Adjust SDK — hence the chain rather than parallel Tasks. The
     /// app-open resume handler is installed by the host app (AdsKit no longer
     /// owns the Remote Config schema that drives its policy).
+    ///
+    /// Idempotent: routed through `ConfigureCoordinator.ensureChainStarted(_:)`,
+    /// so a second `configure(...)` call observes the existing chain Task
+    /// instead of spawning a duplicate.
     @MainActor
     private static func startAdjustChain(
         _ adjust: AdjustClient.Config?,
@@ -365,49 +268,53 @@ extension AdsKit {
         @Dependency(\.adjustClient) var adjustClient
         @Dependency(\.mobileAdsClient) var mobileAdsClient
         @Dependency(\.analyticClient) var analyticClient
-        let previousTask = Self.adRevenueChainTask
-        Self.adRevenueChainTask = Task { [adjustClient, mobileAdsClient, analyticClient] in
-            // Serialize concurrent retries: wait for any in-flight chain to land
-            // its outcome writes before we snapshot.
-            await previousTask?.value
-            let snapshot = await MainActor.run { Self.outcome }
+        Task { [adjustClient, mobileAdsClient, analyticClient] in
+            let coordinator = AdsKit.ConfigureCoordinator.shared
+            await coordinator.ensureChainStarted {
+                let snapshot = await coordinator.snapshot()
+                let startedAt = Date()
+                var adjustInitialized = false
+                var revenueBridgeInstalled = false
 
-            let startedAt = Date()
-            var adjustInitialized = false
-            var revenueBridgeInstalled = false
+                // TODO: AdjustClient / MobileAdsClient calls below are non-throwing,
+                // so the StepStatus we record is always `.succeeded` once the await
+                // returns. Wrap in do/catch once upstream APIs throw and surface
+                // `.failed(reason:)` with the underlying error.
+                if let adjust, snapshot.adjust != .succeeded {
+                    await adjustClient.initialize(adjust)
+                    adjustInitialized = true
+                    await coordinator.setAdjust(.succeeded)
+                    Logger.adsKitConfigure.info("adjust — initialize completed")
+                } else if adjust == nil {
+                    await coordinator.setAdjust(.skipped)
+                }
+                if enableRevenueBridge, snapshot.revenueBridge != .succeeded {
+                    Logger.adsKitConfigure.info("revenue bridge — install dispatched")
+                    await mobileAdsClient.installRevenueBridge()
+                    revenueBridgeInstalled = true
+                    await coordinator.setRevenueBridge(.succeeded)
+                    Logger.adsKitConfigure.info("revenue bridge — install completed")
+                } else if !enableRevenueBridge {
+                    await coordinator.setRevenueBridge(.skipped)
+                }
 
-            // TODO: AdjustClient / MobileAdsClient calls below are non-throwing,
-            // so the `*_initialized` / `*_installed` booleans record only that
-            // the await returned. Wrap in do/catch once upstream APIs throw.
-            if let adjust, snapshot.adjust != true {
-                await adjustClient.initialize(adjust)
-                adjustInitialized = true
-                await MainActor.run { Self.outcome.adjust = true }
-                Logger.adsKitConfigure.info("adjust — initialize completed")
+                let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+                // `was_noop` distinguishes a successful chain (all true) from a retry
+                // where every step was already done in a prior call (all false because
+                // the snapshot guard skipped them). Without this flag a dashboard
+                // sees two `false`s and misreads it as total failure.
+                let wasNoop = !adjustInitialized && !revenueBridgeInstalled
+                await analyticClient.trackEvent("adskit_configure_chain_completed", [
+                    "duration_ms": .int(durationMs),
+                    "adjust_initialized": .bool(adjustInitialized),
+                    "revenue_bridge_installed": .bool(revenueBridgeInstalled),
+                    "was_noop": .bool(wasNoop),
+                ])
+                Logger.adsKitConfigure.notice(
+                    "telemetry: adskit_configure_chain_completed emitted (duration_ms=\(durationMs), was_noop=\(wasNoop))"
+                )
+                return await coordinator.snapshot()
             }
-            if enableRevenueBridge, snapshot.revenueBridge != true {
-                Logger.adsKitConfigure.info("revenue bridge — install dispatched")
-                await mobileAdsClient.installRevenueBridge()
-                revenueBridgeInstalled = true
-                await MainActor.run { Self.outcome.revenueBridge = true }
-                Logger.adsKitConfigure.info("revenue bridge — install completed")
-            }
-
-            let durationMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-            // `was_noop` distinguishes a successful chain (all true) from a retry
-            // where every step was already done in a prior call (all false because
-            // the snapshot guard skipped them). Without this flag a dashboard
-            // sees two `false`s and misreads it as total failure.
-            let wasNoop = !adjustInitialized && !revenueBridgeInstalled
-            await analyticClient.trackEvent("adskit_configure_chain_completed", [
-                "duration_ms": .int(durationMs),
-                "adjust_initialized": .bool(adjustInitialized),
-                "revenue_bridge_installed": .bool(revenueBridgeInstalled),
-                "was_noop": .bool(wasNoop),
-            ])
-            Logger.adsKitConfigure.notice(
-                "telemetry: adskit_configure_chain_completed emitted (duration_ms=\(durationMs), was_noop=\(wasNoop))"
-            )
         }
     }
 
