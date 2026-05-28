@@ -1,5 +1,5 @@
 {
-  "originHash" : "5592f71e0b6d50659fc1b3dba6866ff5d4b3d69a4426510246e46101521e1d10",
+  "originHash" : "d06dec09d38878ee3d9d176f68e795b23db28ca7ae95d0a0d50783a693b808ac",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mahainc/AdjustClient.git",
       "state" : {
-        "branch" : "master",
-        "revision" : "74dcb559dcbdda32bf354c1716b66d85f94cc198"
+        "revision" : "cf8210135a12a92744a612f189432b0a74c71516",
+        "version" : "1.0.2"
       }
     },
     {
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mahainc/AdRevenueClient.git",
       "state" : {
-        "branch" : "master",
-        "revision" : "1c6296c2ff6bedf81c6717a8e8d239d266013cda"
+        "revision" : "582f72eaeeaf8ec8c880b4449495bcc2e91609fe",
+        "version" : "2.0.0"
       }
     },
     {
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mahainc/AnalyticClient.git",
       "state" : {
-        "branch" : "master",
-        "revision" : "86c7cfed4b8d8d8f28963b4c4e4601ae2d5f30d6"
+        "revision" : "7511319df0a2af317f07095ea57be2b4878a9426",
+        "version" : "1.1.0"
       }
     },
     {
@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/firebase/firebase-ios-sdk.git",
       "state" : {
-        "branch" : "main",
-        "revision" : "b6d6c0020ae6fafeb4a9fd0fa5e1ed6c08259b49"
+        "revision" : "d10045cace0b4c335c4efa8f7df7e9a9fc5a7c60",
+        "version" : "12.13.0"
       }
     },
     {
@@ -96,8 +96,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/google/GoogleAppMeasurement.git",
       "state" : {
-        "revision" : "5100f946bd32778662047a823bf145c6da32d85d",
-        "version" : "12.12.1"
+        "revision" : "c2c76bebcfbb90d90ea10599f934f9af160e1604",
+        "version" : "12.13.0"
       }
     },
     {
@@ -168,8 +168,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mahainc/MobileAdsClient.git",
       "state" : {
-        "branch" : "master",
-        "revision" : "da5579c7dc45389a01a533bdd2ad9127a8444b4d"
+        "revision" : "6562fafd1716a056bc1b8181e74b997311c4ef46",
+        "version" : "1.0.3"
       }
     },
     {
@@ -195,8 +195,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mahainc/RemoteConfigClient.git",
       "state" : {
-        "branch" : "master",
-        "revision" : "fcbf3f0522af3d3b21ce3233834f5b83f6a4e11c"
+        "revision" : "cf3b58c61e204114b252e8cd7b3ba9d8caf01197",
+        "version" : "0.1.0"
       }
     },
     {
@@ -231,8 +231,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/pointfreeco/swift-composable-architecture.git",
       "state" : {
-        "branch" : "main",
-        "revision" : "7517cc32aa083773f096dc4724a0b83215bf3c55"
+        "revision" : "1eaa6fa2ee57ac42843283b9fd3457af408c858d",
+        "version" : "1.25.5"
       }
     },
     {
@@ -285,8 +285,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/googleads/swift-package-manager-google-mobile-ads.git",
       "state" : {
-        "branch" : "main",
-        "revision" : "8d08e4396ea955a7d2baf067c0eedfc34ca0821d"
+        "revision" : "a81f522aa4f59c0d90ee523d703bd426d5b27a03",
+        "version" : "13.4.0"
       }
     },
     {
@@ -328,10 +328,10 @@
     {
       "identity" : "tcainitializablereducer",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ThanhHaiKhong/TCAInitializableReducer.git",
+      "location" : "https://github.com/mahainc/TCAInitializableReducer.git",
       "state" : {
-        "branch" : "master",
-        "revision" : "894dde4e687f04adc68a9a20d36b70cab4bdda68"
+        "revision" : "a576bb3619c4160d4d33dd2c07f9f12e2f1a0ff8",
+        "version" : "0.1.0"
       }
     },
     {
@@ -339,8 +339,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mahainc/UMPClient.git",
       "state" : {
-        "branch" : "main",
-        "revision" : "901a2ac9dc6323eeebcd8ff09a1e36ad320dc374"
+        "revision" : "bcfdb3c30344421e823a0b2891d3adc08b6ed53d",
+        "version" : "1.0.1"
       }
     },
     {
