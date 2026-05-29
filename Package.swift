@@ -46,18 +46,14 @@ let package = Package(
                 .product(name: "FirebaseAnalyticsIdentitySupport", package: "firebase-ios-sdk"),
                 .product(name: "FacebookCore", package: "facebook-ios-sdk"),
                 "AdsKit",
-            ],
-            linkerSettings: [
-                // Force the host app's link step to pull `APMPlatformIdentitySupport.o` out
-                // of the GoogleAppMeasurementIdentitySupport static archive. Without this
-                // reference the linker dead-strips the whole archive (no symbol from it is
-                // used by Swift code), and Firebase Analytics logs I-ACS044003 / "IDFA will
-                // not be accessible" at runtime.
-                .unsafeFlags([
-                    "-Xlinker", "-u",
-                    "-Xlinker", "_OBJC_CLASS_$_APMPlatformIdentitySupport",
-                ]),
             ]
+            // NOTE: AdsKitLive previously carried a `.unsafeFlags` linker setting
+            // (`-u _OBJC_CLASS_$_APMPlatformIdentitySupport`) to force-load
+            // `APMPlatformIdentitySupport.o` out of GoogleAppMeasurementIdentitySupport
+            // (otherwise the linker dead-strips it and Firebase logs I-ACS044003 /
+            // "IDFA will not be accessible"). Unsafe flags forbid consuming this
+            // product via a semver requirement, so that flag now lives in the host
+            // app's Other Linker Flags instead, keeping AdsKitLive version-pinnable.
         ),
         .testTarget(
             name: "AdsKitTests",

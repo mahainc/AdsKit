@@ -17,33 +17,33 @@ This is not a single `@DependencyClient` — it's a re-export layer + an orchest
   - `AdsKit.configure(...)` static (single-call SDK bootstrap: FirebaseApp.configure, AnalyticClient.initialize, MobileAds.start, Adjust SDK init, FBSDK init).
   - Deep-link forwarders (Adjust + Facebook).
   - `LaunchConfiguration` value type for app-launch wiring.
-  - Linker workaround: forces `APMPlatformIdentitySupport` symbol from `GoogleAppMeasurementIdentitySupport` so IDFA logging works (otherwise Firebase logs `I-ACS044003 / IDFA will not be accessible`).
+  - IDFA linker requirement: the host app must force-load the `APMPlatformIdentitySupport` symbol from `GoogleAppMeasurementIdentitySupport` so IDFA logging works (otherwise Firebase logs `I-ACS044003 / IDFA will not be accessible`). See Installation — as of **v0.2.2** this lives in the host app's linker flags, not the package.
 
 ## Installation
 
-`AdsKitLive` vends an **unsafe linker flag** (the `APMPlatformIdentitySupport` IDFA
-force-link, see below). SPM forbids consuming any product whose target closure contains
-unsafe flags via a version requirement, so `AdsKitLive` is **only resolvable by `revision:`
-or `branch:`** — `from:` / version ranges fail with *"the target 'AdsKitLive' in product
-'AdsKitLive' contains unsafe build flags"*. The SDK-free `AdsKit` umbrella has no unsafe
-flags and resolves normally.
-
-Because one package can declare only one requirement per URL, pin the **revision** (the
-commit the release tag points at) so both products resolve:
+Pin by version — both products resolve normally:
 
 ```swift
-// Pin the revision the desired release tag points at (here: v0.2.1).
-.package(
-    url: "https://github.com/mahainc/AdsKit.git",
-    revision: "<commit sha of v0.2.1>"
-),
+.package(url: "https://github.com/mahainc/AdsKit.git", from: "0.2.2"),
 ```
 
 - `AdsKit` on feature targets (and test/preview targets — it's SDK-free).
 - `AdsKitLive` on the app target only.
 
-> If your app never adds `AdsKitLive` (interface-only usage), you may instead pin
-> `AdsKit` by version: `.package(url: "…/AdsKit.git", from: "0.2.0")`.
+> **IDFA linker flag (required when using `AdsKitLive`).** Add the following to the
+> **host app target's** `Other Linker Flags` (`OTHER_LDFLAGS`). It force-loads
+> `APMPlatformIdentitySupport.o` out of `GoogleAppMeasurementIdentitySupport`; without
+> it the linker dead-strips the archive and Firebase logs `I-ACS044003 / IDFA will not
+> be accessible`:
+>
+> ```
+> -Xlinker -u -Xlinker _OBJC_CLASS_$_APMPlatformIdentitySupport
+> ```
+>
+> Prior to **v0.2.2** this lived inside `AdsKitLive` as a `.unsafeFlags` linker setting,
+> which forced consumers to pin by `revision:` (SPM forbids version-resolving a product
+> whose target closure contains unsafe flags). Moving the flag to the host app makes
+> `AdsKitLive` version-pinnable.
 
 ## Usage
 
