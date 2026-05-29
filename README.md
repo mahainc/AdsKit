@@ -21,12 +21,29 @@ This is not a single `@DependencyClient` — it's a re-export layer + an orchest
 
 ## Installation
 
+`AdsKitLive` vends an **unsafe linker flag** (the `APMPlatformIdentitySupport` IDFA
+force-link, see below). SPM forbids consuming any product whose target closure contains
+unsafe flags via a version requirement, so `AdsKitLive` is **only resolvable by `revision:`
+or `branch:`** — `from:` / version ranges fail with *"the target 'AdsKitLive' in product
+'AdsKitLive' contains unsafe build flags"*. The SDK-free `AdsKit` umbrella has no unsafe
+flags and resolves normally.
+
+Because one package can declare only one requirement per URL, pin the **revision** (the
+commit the release tag points at) so both products resolve:
+
 ```swift
-.package(url: "https://github.com/mahainc/AdsKit.git", from: "0.1.0"),
+// Pin the revision the desired release tag points at (here: v0.2.1).
+.package(
+    url: "https://github.com/mahainc/AdsKit.git",
+    revision: "<commit sha of v0.2.1>"
+),
 ```
 
 - `AdsKit` on feature targets (and test/preview targets — it's SDK-free).
 - `AdsKitLive` on the app target only.
+
+> If your app never adds `AdsKitLive` (interface-only usage), you may instead pin
+> `AdsKit` by version: `.package(url: "…/AdsKit.git", from: "0.2.0")`.
 
 ## Usage
 
