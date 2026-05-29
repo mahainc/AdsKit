@@ -75,6 +75,15 @@ extension AdsKit {
             /// Set to `false` for hosts that handle priming themselves or never
             /// read Remote Config.
             public let primeRemoteConfig: Bool
+            /// Optional gate, evaluated right after the ATT prompt resolves, that
+            /// decides whether the UMP consent form should run. Return `false` to
+            /// skip it (e.g. when the user denied ATT). `nil` (default) keeps ATT
+            /// and UMP independent — the standard behavior, since GDPR consent
+            /// does not depend on ATT. Hosts that want them coupled pass
+            /// `{ ATTrackingManager.trackingAuthorizationStatus == .authorized }`
+            /// (kept as a host closure so this target stays free of the
+            /// AppTrackingTransparency framework and remains testable).
+            public let umpGate: (@Sendable () -> Bool)?
 
             public init(
                 ump: UMPConfig = UMPConfig(),
@@ -83,7 +92,8 @@ extension AdsKit {
                 enableUMP: Bool = true,
                 configureGate: @escaping @Sendable () async -> ConfigureOutcome = { ConfigureOutcome() },
                 launchAdLoadTimeout: TimeInterval = 2.0,
-                primeRemoteConfig: Bool = true
+                primeRemoteConfig: Bool = true,
+                umpGate: (@Sendable () -> Bool)? = nil
             ) {
                 self.ump = ump
                 self.launchAd = launchAd
@@ -92,6 +102,7 @@ extension AdsKit {
                 self.configureGate = configureGate
                 self.launchAdLoadTimeout = launchAdLoadTimeout
                 self.primeRemoteConfig = primeRemoteConfig
+                self.umpGate = umpGate
             }
         }
 
@@ -161,8 +172,10 @@ extension AdsKit {
                             configureOutcome = await config.configureGate()
                             await send(.configureOutcomeReceived(configureOutcome))
 
-                            // Step 4 — UMP form.
-                            if config.enableUMP {
+                            // Step 4 — UMP form. Hosts may gate UMP on the ATT
+                            // outcome via `umpGate`; by default the two are independent.
+                            let attAllowsUMP = config.umpGate?() ?? true
+                            if config.enableUMP && attAllowsUMP {
                                 lastPhase = .requestingUMP
                                 Logger.adsKitBootstrap.info("phase=requestingUMP")
                                 await send(.advance(.requestingUMP))

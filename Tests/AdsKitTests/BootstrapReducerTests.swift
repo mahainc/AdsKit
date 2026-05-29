@@ -225,6 +225,68 @@ final class BootstrapReducerTests: XCTestCase {
         await store.finish()
     }
 
+    // MARK: - umpGate
+
+    /// When `umpGate` returns false, the UMP step is skipped even though
+    /// `enableUMP` is true — the consent phase never fires and consent stays
+    /// `.unknown`. Models the "ATT denied → skip UMP" host configuration.
+    func test_umpGateDenies_skipsConsentPhase() async {
+        let store = TestStore(initialState: AdsKit.Bootstrap.State()) {
+            AdsKit.Bootstrap()
+        } withDependencies: {
+            $0.mobileAdsClient = .bootstrapTest()
+            $0.umpClient = .alwaysObtained   // proves UMP is NOT consulted when gated off
+            $0.analyticClient = .recording(AnalyticRecorder())
+            $0.remoteConfigClient = .bootstrapNoop
+        }
+
+        let config = AdsKit.Bootstrap.Config(
+            launchAd: .none,
+            enableUMP: true,
+            primeRemoteConfig: false,
+            umpGate: { false }
+        )
+
+        await store.send(.start(config)) { $0.phase = .preloading }
+        await store.receive(\.advance) { $0.phase = .requestingATT }
+        await store.receive(\.configureOutcomeReceived) { $0.configureOutcome = AdsKit.ConfigureOutcome() }
+        await store.receive(\.advance) { $0.phase = .showingLaunchAd }
+        await store.receive(\.advance) { $0.phase = .done }
+        await store.finish()
+
+        XCTAssertEqual(store.state.consent, .unknown, "UMP was gated off, so consent must stay .unknown")
+    }
+
+    /// When `umpGate` returns true, UMP runs exactly as in the happy path.
+    func test_umpGateAllows_runsConsentPhase() async {
+        let store = TestStore(initialState: AdsKit.Bootstrap.State()) {
+            AdsKit.Bootstrap()
+        } withDependencies: {
+            $0.mobileAdsClient = .bootstrapTest()
+            $0.umpClient = .alwaysObtained
+            $0.analyticClient = .recording(AnalyticRecorder())
+            $0.remoteConfigClient = .bootstrapNoop
+        }
+
+        let config = AdsKit.Bootstrap.Config(
+            launchAd: .none,
+            enableUMP: true,
+            primeRemoteConfig: false,
+            umpGate: { true }
+        )
+
+        await store.send(.start(config)) { $0.phase = .preloading }
+        await store.receive(\.advance) { $0.phase = .requestingATT }
+        await store.receive(\.configureOutcomeReceived) { $0.configureOutcome = AdsKit.ConfigureOutcome() }
+        await store.receive(\.advance) { $0.phase = .requestingUMP }
+        await store.receive(\.consentResolved) { $0.consent = .obtained }
+        await store.receive(\.advance) { $0.phase = .showingLaunchAd }
+        await store.receive(\.advance) { $0.phase = .done }
+        await store.finish()
+
+        XCTAssertEqual(store.state.consent, .obtained)
+    }
+
     // MARK: - Cancellation
 
     func test_cancel_stopsEffectAndDoesNotReachDone() async {
