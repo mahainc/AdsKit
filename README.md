@@ -24,7 +24,7 @@ This is not a single `@DependencyClient` — it's a re-export layer + an orchest
 Pin by version — both products resolve normally:
 
 ```swift
-.package(url: "https://github.com/mahainc/AdsKit.git", from: "0.2.2"),
+.package(url: "https://github.com/mahainc/AdsKit.git", from: "0.4.0"),
 ```
 
 - `AdsKit` on feature targets (and test/preview targets — it's SDK-free).
@@ -88,6 +88,31 @@ idle → requestingATT → preloading → requestingUMP → showingLaunchAd → 
 ```
 
 The host app owns the policy for resume ads, frequency capping, and gating — Bootstrap only handles the cold-start sequence.
+
+### Lifecycle signals
+
+Bootstrap emits actions the host can observe to drive its own UI or side-effects without inferring lifecycle from internal `Phase` ordering:
+
+- **`.attResolved`** *(since v0.4.0)* — sent the moment the ATT prompt resolves, right after `requestTrackingAuthorizationIfNeeded()` returns and **before** the UMP step. Use this to propagate the tracking decision (e.g. flip a mediation SDK's advertiser-tracking flag). It carries no payload — read `ATTrackingManager.trackingAuthorizationStatus` yourself — so the SDK-free `AdsKit` target stays free of the `AppTrackingTransparency` framework.
+
+  ```swift
+  // In your host reducer that scopes Bootstrap:
+  case .bootstrap(.attResolved):
+      let granted = ATTrackingManager.trackingAuthorizationStatus == .authorized
+      return .run { _ in await mediationPrivacyClient.setAdvertiserTrackingEnabled(granted) }
+  ```
+
+  > Prior to v0.4.0 there was no post-ATT signal — hosts that keyed off `.advance(.preloading)` silently never fired, because `.start` sets `.preloading` by direct mutation and never sends it as an `.advance`.
+
+- **`.consentResolved(UMPConsentStatus)`** — sent after the UMP form completes (when `enableUMP` and the `umpGate` allow it). Use it to gate GDPR-conditional SDKs (analytics collection, etc.).
+
+### `configureGate`
+
+`Config.configureGate` is awaited **between ATT and UMP** so the Configure-side Adjust → revenue-bridge chain (started by `AdsKit.configure(...)`) lands before the launch ad fires — otherwise the ad's paid-impression event can race an un-installed bridge and be dropped. It also returns the per-step `ConfigureOutcome` that Bootstrap stamps into its success telemetry.
+
+*Since v0.4.0* the default is `{ await ConfigureCoordinator.shared.awaitChain() }`, so a host that constructs a raw `Config` is correct out of the box — no need to reach for AdsKitLive's `.live(...)` factory just to avoid losing the wait. `awaitChain()` returns the current (empty) snapshot when `configure(...)` was never called, so tests and previews are unaffected.
+
+  > Prior to v0.4.0 the default was a no-op `{ ConfigureOutcome() }`. Feature modules can't import AdsKitLive (where `.live(...)` lives), so a raw `Config.init` silently skipped the revenue-chain wait and shipped empty `configure_*` telemetry. The new default closes that trap; passing `configureGate:` explicitly still works and documents intent at the call site.
 
 ## Deep links
 
