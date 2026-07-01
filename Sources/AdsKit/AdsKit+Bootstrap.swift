@@ -113,8 +113,10 @@ extension AdsKit {
         public enum Action: Sendable {
             case start(Config)
             case advance(State.Phase)
-            /// Emitted once the ATT prompt has resolved (right after
-            /// `requestTrackingAuthorizationIfNeeded()` returns). A host-facing
+            /// Emitted once the bootstrap reaches the ATT phase. As of
+            /// MobileAdsClient 1.3.0 the bootstrap no longer prompts for ATT
+            /// (the host owns the prompt); this fires right after the
+            /// `.requestingATT` phase transition. A host-facing
             /// notification so callers can propagate the tracking decision (e.g.
             /// flip a mediation SDK's advertiser-tracking flag) without inferring
             /// it from phase ordering. The host reads
@@ -172,13 +174,17 @@ extension AdsKit {
                                 // fully-loaded launch ad by the time .showingLaunchAd fires.
                                 await config.preloads()
 
-                                // Step 3 — ATT prompt.
+                                // Step 3 — ATT phase. As of MobileAdsClient 1.3.0 the
+                                // SDK no longer owns an ATT prompt (`requestTracking-
+                                // AuthorizationIfNeeded` was removed), so the bootstrap
+                                // does NOT prompt here — the HOST presents ATT itself
+                                // (e.g. after waiting for `.active`, which the old SDK
+                                // method never did) and drives the tracking decision.
+                                // We keep the phase transition + `.attResolved` so the
+                                // host contract and progress machine are unchanged.
                                 lastPhase = .requestingATT
                                 Logger.adsKitBootstrap.info("phase=requestingATT")
                                 await send(.advance(.requestingATT))
-                                await mobileAdsClient.requestTrackingAuthorizationIfNeeded()
-                                // ATT prompt resolved — notify the host so it can
-                                // propagate the tracking decision before UMP runs.
                                 await send(.attResolved)
 
                                 // Between ATT and UMP — await the configure-side Adjust →
@@ -215,8 +221,8 @@ extension AdsKit {
                                 // first-install when preloads fired pre-UMP and the load is
                                 // still in flight).
                                 //
-                                // `shouldShowAd` auto-loads into the actor cache that `showAd`
-                                // reads from. On first install the preload from `config.preloads`
+                                // `shouldShowFullScreenAd` auto-loads into the actor cache that
+                                // `showFullScreenAd` reads from. On first install the preload from `config.preloads`
                                 // may still be in flight when this phase fires, so we poll for
                                 // up to `config.launchAdLoadTimeout` before giving up.
                                 lastPhase = .showingLaunchAd
@@ -232,14 +238,14 @@ extension AdsKit {
                                     }
                                 }()
                                 if let adType {
-                                    var ready = await mobileAdsClient.shouldShowAd(adType, [])
+                                    var ready = await mobileAdsClient.shouldShowFullScreenAd(adType, [])
                                     while !ready && Date() < loadDeadline {
                                         try await Task.sleep(nanoseconds: pollInterval)
-                                        ready = await mobileAdsClient.shouldShowAd(adType, [])
+                                        ready = await mobileAdsClient.shouldShowFullScreenAd(adType, [])
                                     }
                                     if ready {
                                         do {
-                                            try await mobileAdsClient.showAd(adType)
+                                            try await mobileAdsClient.showFullScreenAd(adType)
                                             splashAdShown = true
                                         } catch {
                                             Logger.adsKitBootstrap.notice(

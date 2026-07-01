@@ -1,5 +1,5 @@
 {
-  "originHash" : "d06dec09d38878ee3d9d176f68e795b23db28ca7ae95d0a0d50783a693b808ac",
+  "originHash" : "367775483bc869cbd75f01f40ba272ccadd927628bdbc644947ce0d5ffe8d22a",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -168,8 +168,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mahainc/MobileAdsClient.git",
       "state" : {
-        "revision" : "6562fafd1716a056bc1b8181e74b997311c4ef46",
-        "version" : "1.0.3"
+        "revision" : "958882707bb8aa0d1269bc3560d5a790068a89c3",
+        "version" : "1.3.0"
       }
     },
     {

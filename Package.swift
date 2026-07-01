@@ -11,7 +11,7 @@ let package = Package(
         .singleTargetLibrary("AdsKitLive"),
     ],
     dependencies: [
-        .package(url: "https://github.com/mahainc/MobileAdsClient.git", from: "1.0.3"),
+        .package(url: "https://github.com/mahainc/MobileAdsClient.git", from: "1.3.0"),
         .package(url: "https://github.com/mahainc/RemoteConfigClient.git", from: "0.1.0"),
         .package(url: "https://github.com/mahainc/UMPClient.git", from: "1.0.1"),
         .package(url: "https://github.com/mahainc/AdjustClient.git", from: "1.0.2"),
