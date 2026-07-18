@@ -17,7 +17,7 @@ let package = Package(
         .package(url: "https://github.com/mahainc/AdjustClient.git", from: "1.0.2"),
         .package(url: "https://github.com/mahainc/AnalyticClient.git", from: "1.1.0"),
         .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "12.13.0"),
-        .package(url: "https://github.com/facebook/facebook-ios-sdk.git", from: "17.0.0"),
+        .package(url: "https://github.com/facebook/facebook-ios-sdk.git", "17.0.0"..<"19.0.0"),
         .package(url: "https://github.com/pointfreeco/swift-composable-architecture.git", from: "1.25.5"),
     ],
     targets: [
